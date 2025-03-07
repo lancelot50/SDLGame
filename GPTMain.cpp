@@ -240,9 +240,28 @@ public:
 
 class SubSystem
 {
+public :
     virtual void Update() = 0;
     virtual void Render(RenderInterface* RI) = 0;
 };
+
+class GameState : public SubSystem
+{
+};
+
+class GameStatePlaying : public GameState
+{
+public :
+    void Update() {}
+    void Render(RenderInterface* RI) {}
+};
+
+class GameStateMenu : public GameState
+{
+    void Update() {}
+    void Render(RenderInterface* RI) {}
+};
+
 
 class Game
 {
@@ -250,6 +269,8 @@ class Game
     Viewport VP;
     Level Stage;
     ResourceManager RM;
+    
+    GameState* state;
 public:
 
 private:
@@ -285,8 +306,8 @@ private:
 
     void initGameData()
     {
-        Stage.Init(VP);
         RM.LoadResources(RI);
+        Stage.Init(VP);
 
         spaceship = new Object();
         spaceship->Init(ResourceManager::ResID_SpaceShip, Stage.StartPos());
@@ -303,6 +324,8 @@ private:
 
     void init()
     {
+        state = new GameStatePlaying();
+
         RI = new SDLRenderInterface();
         RI->CreateRenderer(&VP);
         initGameData();
@@ -386,6 +409,8 @@ private:
     void Render()
     {
         RI->PreRender();
+
+        state->Render(RI);
 
         for (Object* obj : objects)
         {
