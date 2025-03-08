@@ -35,79 +35,15 @@ struct Location
         y += In.y;
     }
 };
-
-class Level
+struct Rect
 {
-    Location StartLoc;
-
-public:
-    int Width = 0;
-    int Height = 0;
-
-    void Init(const Viewport& VP)
-    {
-        Width = VP.WIDTH;
-        Height = VP.HEIGHT;
-
-        StartLoc=Location{ Width / 2, Height - 100 };
-    }
-    const Location& StartPos() const { return StartLoc; }
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    int h = 0;
 };
 
-class Object
-{
-public:
-    int dx = 0;
-    int dy = 0;
-    bool show = true;
-    Location Loc;
 
-    int ResourceID = 0;
-
-    virtual ~Object() { }
-
-    virtual void Update(const Level& CurLevel) {}
-    void Init(int ResID, const Location& InitLoc)
-    {
-        ResourceID = ResID;
-        Loc = InitLoc;
-    }
-
-    void MoveDelta(const Location& Delta)
-    {
-        Loc += Delta;
-    }
-
-    void SetLocation(const Location& NewLoc)
-    {
-        Loc = NewLoc;
-    }
-};
-
-class Alien : public Object
-{
-public:
-    void Update(const Level& CurLevel) override
-    {
-        Loc.x += dx;
-        if (Loc.x <= 0 || Loc.x >= CurLevel.Width)
-        {
-            dx *= -1;
-            Loc.y += 10;
-        }
-    }
-};
-
-class Missile : public Object
-{
-public:
-    void Update(const Level& CurLevel) override
-    {
-        Loc.y += dy;
-        if (Loc.y < 0)
-            show = false;
-    }
-};
 
 class Texture
 {
@@ -130,19 +66,208 @@ public:
     }
 };
 
+class Object
+{
+public:
+    int dx = 0;
+    int dy = 0;
+    bool show = true;
+    Location Loc;
+
+    Texture* pTex=nullptr;
+    int TexWidth=0;
+    int TexHeight=0;
+
+    Rect rect;
+
+    int ResourceID = 0;
+
+    virtual ~Object() { }
+
+    virtual void Update() {}
+    void Init(Texture& Tex, const Location& InitLoc, const Rect& StageRect)
+    {
+        pTex = &Tex;
+
+        Loc = InitLoc;
+        rect = StageRect;
+    }
+
+    void MoveDelta(const Location& Delta)
+    {
+        Loc += Delta;
+    }
+
+    void SetLocation(const Location& NewLoc)
+    {
+        Loc = NewLoc;
+    }
+};
+
+class Alien : public Object
+{
+public:
+    void Update() override
+    {
+        Loc.x += dx;
+        if (Loc.x <= 0 || Loc.x >= rect.w)
+        {
+            dx *= -1;
+            Loc.y += 10;
+        }
+    }
+};
+
+class Missile : public Object
+{
+public:
+    void Update() override
+    {
+        Loc.y += dy;
+        if (Loc.y < 0)
+            show = false;
+    }
+};
+
 class RenderInterface
 {
-public :
+public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
     virtual void RenderText(const std::string& message, int x, int y) = 0;
-    virtual void RenderObject(Object* obj, const Texture& Tex) = 0;
-    virtual void Destroy()=0;
+    virtual void RenderObject(Object* obj) = 0;
+    virtual void Destroy() = 0;
 
     virtual void PreRender() = 0;
     virtual void PostRender() = 0;
 
     virtual void* GetRenderer() = 0;
 };
+
+
+class SubSystem
+{
+public:
+    virtual void Update() = 0;
+    virtual void Render(RenderInterface* RI) = 0;
+};
+
+class Level : public SubSystem
+{
+    Location StartLoc;
+
+    Object* spaceship;
+    std::vector<Object*> objects;
+
+public:
+    int Width = 0;
+    int Height = 0;
+
+    void Init(const Viewport& VP)
+    {
+        Width = VP.WIDTH;
+        Height = VP.HEIGHT;
+
+        StartLoc=Location{ Width / 2, Height - 100 };
+    }
+
+    void CreateSpaceShip(Texture& Tex)
+    {
+        spaceship = new Object();
+        spaceship->Init(Tex, StartPos(), Rect{0,0,Width, Height});
+        objects.push_back(spaceship);
+    }
+    void CreateAliens(Texture& Tex)
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            Alien* alien = new Alien();
+            alien->Init(Tex, Location{ 50 + i * 70, 50 }, Rect{ 0,0,Width, Height });
+            alien->dx = 1;
+            objects.push_back(alien);
+        }
+    }
+
+    void Destroy()
+    {
+        for (Object* obj : objects)
+            delete obj;
+        objects.clear();
+    }
+
+    const Location& StartPos() const { return StartLoc; }
+    const size_t& GetObjNum() const {  return objects.size(); }
+
+    void PlayerMoveLeft()
+    {
+        spaceship->MoveDelta({ -30, 0 });
+    }
+    void PlayerMoveRight()
+    {
+        spaceship->MoveDelta({ 30, 0 });
+    }
+
+    void CreateMissile(Texture& Tex)
+    {
+        Missile* missile = new Missile();
+        missile->Init(Tex, spaceship->Loc, Rect{0,0,Width, Height});
+        missile->dy = -10;
+        objects.push_back(missile);
+    }
+
+    void updateCollision()
+    {
+        for (Object* obj : objects)
+        {
+            Missile* missile = dynamic_cast<Missile*>(obj);
+            if (missile && missile->show)
+            {
+                for (Object* target : objects)
+                {
+                    Alien* alien = dynamic_cast<Alien*>(target);
+                    if (alien && alien->show)
+                    {
+                        SDL_Rect missileRect = { missile->Loc.x, missile->Loc.y, missile->pTex->W, missile->pTex->H };
+                        SDL_Rect alienRect = { alien->Loc.x, alien->Loc.y, alien->pTex->W, alien->pTex->H };
+                        if (checkCollision(missileRect, alienRect))
+                        {
+                            missile->show = false;
+                            alien->show = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    void Update() override
+    {
+        for (Object* obj : objects)
+            obj->Update();
+
+        updateCollision();
+
+        // show 플래그가 false인 객체들 삭제
+        objects.erase(std::remove_if(objects.begin(), objects.end(), [](Object* obj) {
+            if (!obj->show)
+            {
+                delete obj;
+                return true;
+            }
+            return false;
+        }), objects.end());
+    }
+
+    void Render(RenderInterface* RI) override
+    {
+        for (Object* obj : objects)
+        {
+            if (obj->show)
+                RI->RenderObject(obj);
+        }
+    }
+};
+
 
 class SDLRenderInterface : public RenderInterface
 {
@@ -185,10 +310,10 @@ public :
         SDL_DestroyTexture(textTexture);
     }
 
-    void RenderObject(Object* Obj, const Texture& Tex)
+    void RenderObject(Object* Obj)
     {
-        SDL_Rect texRect = { Obj->Loc.x - Tex.W / 2, Obj->Loc.y - Tex.H / 2, Tex.W, Tex.H };
-        SDL_RenderCopy(renderer, Tex.Tex, NULL, &texRect);
+        SDL_Rect texRect = { Obj->Loc.x - Obj->pTex->W / 2, Obj->Loc.y - Obj->pTex->H / 2, Obj->pTex->W, Obj->pTex->H };
+        SDL_RenderCopy(renderer, Obj->pTex->Tex, nullptr, &texRect);
     }
 
     void PreRender()
@@ -231,19 +356,13 @@ public:
             i->~Texture();
     }
 
-    const Texture& GetTex(int ResID) const
+    Texture& GetTex(int ResID) const
     {
         return *Data[ResID];
     }
 };
 
 
-class SubSystem
-{
-public :
-    virtual void Update() = 0;
-    virtual void Render(RenderInterface* RI) = 0;
-};
 
 class GameState : public SubSystem
 {
@@ -301,25 +420,12 @@ private:
 
     FPS Fps;
 
-    Object* spaceship;
-    std::vector<Object*> objects;
-
     void initGameData()
     {
         RM.LoadResources(RI);
         Stage.Init(VP);
-
-        spaceship = new Object();
-        spaceship->Init(ResourceManager::ResID_SpaceShip, Stage.StartPos());
-        objects.push_back(spaceship);
-
-        for (int i = 0; i < 10; i++)
-        {
-            Alien* alien = new Alien();
-            alien->Init(ResourceManager::ResID_Alien, Location{ 50 + i * 70, 50 });
-            alien->dx = 1;
-            objects.push_back(alien);
-        }
+        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
+        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
     }
 
     void init()
@@ -345,66 +451,23 @@ private:
             else if (event.type == SDL_KEYDOWN)
             {
                 if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_KP_6)
-                    spaceship->MoveDelta({ 30, 0 });
+                    Stage.PlayerMoveRight();
                 if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_KP_4)
-                    spaceship->MoveDelta({ -30, 0 });
+                    Stage.PlayerMoveLeft();
                 if (event.key.keysym.sym == SDLK_SPACE)
-                {
-                    Missile* missile = new Missile();
-                    missile->Init(ResourceManager::ResID_Missile, spaceship->Loc);
-                    missile->dy = -10;
-                    objects.push_back(missile);
-                }
+                    Stage.CreateMissile(RM.GetTex(ResourceManager::ResID_Missile));
             }
         }
 
-        for (Object* obj : objects)
-        {
-            obj->Update(Stage); // 모든 객체 업데이트
-        }
+        Stage.Update();
 
-        updateCollision(); // 충돌 처리
-
-        // show 플래그가 false인 객체들 삭제
-        objects.erase(std::remove_if(objects.begin(), objects.end(), [](Object* obj) {
-            if (!obj->show)
-            {
-                delete obj;
-                return true;
-            }
-            return false;
-        }), objects.end());
-
-        Fps.ObjectCount = objects.size();
+        Fps.ObjectCount = Stage.GetObjNum();
         Fps.Update(); // FPS 계산
 
         return quit;
     }
 
-    void updateCollision()
-    {
-        for (Object* obj : objects)
-        {
-            Missile* missile = dynamic_cast<Missile*>(obj);
-            if (missile && missile->show)
-            {
-                for (Object* target : objects)
-                {
-                    Alien* alien = dynamic_cast<Alien*>(target);
-                    if (alien && alien->show)
-                    {
-                        SDL_Rect missileRect = { missile->Loc.x, missile->Loc.y, RM.GetTex(missile->ResourceID).W, RM.GetTex(missile->ResourceID).H };
-                        SDL_Rect alienRect = { alien->Loc.x, alien->Loc.y, RM.GetTex(alien->ResourceID).W, RM.GetTex(alien->ResourceID).H };
-                        if( checkCollision(missileRect, alienRect))
-                        {
-                            missile->show = false;
-                            alien->show = false;
-                        }
-                    }
-                }
-            }
-        }
-    }
+
 
     void Render()
     {
@@ -412,14 +475,7 @@ private:
 
         state->Render(RI);
 
-        for (Object* obj : objects)
-        {
-            if (obj->show)
-            {
-                const Texture& tex = RM.GetTex(obj->ResourceID);
-                RI->RenderObject(obj, tex);
-            }
-        }
+        Stage.Render(RI);
 
         Fps.Render(RI);
 
@@ -439,11 +495,7 @@ private:
 
     void terminate()
     {
-        for (Object* obj : objects)
-        {
-            delete obj;
-        }
-        objects.clear();
+        Stage.Destroy();
 
         RI->Destroy();
         SDL_Quit();
