@@ -5,7 +5,15 @@
 #include <algorithm>
 #include <string>
 
-// 충돌 처리 함수
+
+
+struct DebugManager
+{
+    bool bShowObjectRect = false;
+};
+DebugManager DM;
+
+
 int checkCollision(const SDL_Rect& rect1, const SDL_Rect& rect2)
 {
     if (rect1.x + rect1.w >= rect2.x &&
@@ -23,7 +31,6 @@ public :
     const int WIDTH = 1280;
     const int HEIGHT = 960;
 };
-
 
 struct Location
 {
@@ -110,7 +117,7 @@ public:
     void Update() override
     {
         Loc.x += dx;
-        if (Loc.x <= 0 || Loc.x >= rect.w)
+        if (Loc.x-pTex->W/2 <= 0 || Loc.x+pTex->W/2 >= rect.w)
         {
             dx *= -1;
             Loc.y += 10;
@@ -195,7 +202,7 @@ public:
     }
 
     const Location& StartPos() const { return StartLoc; }
-    const size_t& GetObjNum() const {  return objects.size(); }
+    size_t GetObjNum() const {  return objects.size(); }
 
     void PlayerMoveLeft()
     {
@@ -314,6 +321,11 @@ public :
     {
         SDL_Rect texRect = { Obj->Loc.x - Obj->pTex->W / 2, Obj->Loc.y - Obj->pTex->H / 2, Obj->pTex->W, Obj->pTex->H };
         SDL_RenderCopy(renderer, Obj->pTex->Tex, nullptr, &texRect);
+        if (DM.bShowObjectRect)
+        {
+            SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+            SDL_RenderDrawRect(renderer, &texRect);
+        }
     }
 
     void PreRender()
@@ -381,7 +393,6 @@ class GameStateMenu : public GameState
     void Render(RenderInterface* RI) {}
 };
 
-
 class Game
 {
     RenderInterface* RI;
@@ -390,6 +401,7 @@ class Game
     ResourceManager RM;
     
     GameState* state;
+
 public:
 
 private:
@@ -456,6 +468,8 @@ private:
                     Stage.PlayerMoveLeft();
                 if (event.key.keysym.sym == SDLK_SPACE)
                     Stage.CreateMissile(RM.GetTex(ResourceManager::ResID_Missile));
+                if (event.key.keysym.sym == SDLK_F9)
+                    DM.bShowObjectRect = !DM.bShowObjectRect;
             }
         }
 
