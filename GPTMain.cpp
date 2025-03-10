@@ -150,6 +150,10 @@ public:
     virtual void* GetRenderer() = 0;
 };
 
+class InputHandler
+{
+    virtual bool HandleInput(const SDL_Event& event) = 0;
+};
 
 class SubSystem
 {
@@ -158,7 +162,43 @@ public:
     virtual void Render(RenderInterface* RI) = 0;
 };
 
-class Level : public SubSystem
+
+
+class ResourceManager
+{
+    std::vector<Texture*> Data;
+public:
+    enum
+    {
+        ResID_SpaceShip = 0,
+        ResID_Alien = 1,
+        ResID_Missile = 2,
+    };
+    void LoadResources(RenderInterface* RI)
+    {
+        SDL_Renderer* renderer = static_cast<SDL_Renderer*>(RI->GetRenderer());
+        Texture* SpaceShip = new Texture(renderer, "spaceship.bmp", 100, 100);
+        Data.push_back(SpaceShip);
+        Texture* Alien = new Texture(renderer, "alien.bmp", 60, 60);
+        Data.push_back(Alien);
+        Texture* Missile = new Texture(renderer, "missile.bmp", 20, 50);
+        Data.push_back(Missile);
+    }
+    ~ResourceManager()
+    {
+        for (auto& i : Data)
+            i->~Texture();
+    }
+
+    Texture& GetTex(int ResID) const
+    {
+        return *Data[ResID];
+    }
+};
+ResourceManager RM;
+
+
+class Level : public SubSystem, public InputHandler
 {
     Location StartLoc;
 
@@ -204,21 +244,24 @@ public:
     const Location& StartPos() const { return StartLoc; }
     size_t GetObjNum() const {  return objects.size(); }
 
-    void PlayerMoveLeft()
+    bool PlayerMoveLeft()
     {
         spaceship->MoveDelta({ -30, 0 });
+        return true;
     }
-    void PlayerMoveRight()
+    bool PlayerMoveRight()
     {
         spaceship->MoveDelta({ 30, 0 });
+        return true;
     }
 
-    void CreateMissile(Texture& Tex)
+    bool CreateMissile(Texture& Tex)
     {
         Missile* missile = new Missile();
         missile->Init(Tex, spaceship->Loc, Rect{0,0,Width, Height});
         missile->dy = -10;
         objects.push_back(missile);
+        return true;
     }
 
     void updateCollision()
@@ -246,6 +289,26 @@ public:
         }
     }
 
+    bool HandleInput(const SDL_Event& event)
+    {
+        bool isHandled = false;
+        if (event.type == SDL_KEYDOWN)
+        {
+            if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_KP_6)
+                isHandled=PlayerMoveRight();
+            if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_KP_4)
+                isHandled = PlayerMoveLeft();
+            if (event.key.keysym.sym == SDLK_SPACE)
+                isHandled = CreateMissile(RM.GetTex(ResourceManager::ResID_Missile));
+            if (event.key.keysym.sym == SDLK_F9)
+            {
+                DM.bShowObjectRect = !DM.bShowObjectRect;
+                isHandled = true;
+            }
+        }
+
+        return isHandled;
+    }
 
     void Update() override
     {
@@ -342,41 +405,9 @@ public :
     void* GetRenderer() { return renderer;  }
 };
 
-class ResourceManager
-{
-    std::vector<Texture*> Data;
-public:
-    enum
-    {
-        ResID_SpaceShip = 0,
-        ResID_Alien = 1,
-        ResID_Missile = 2,
-    };
-    void LoadResources(RenderInterface* RI)
-    {
-        SDL_Renderer* renderer = static_cast<SDL_Renderer*>(RI->GetRenderer());
-        Texture* SpaceShip=new Texture(renderer, "spaceship.bmp", 100, 100);
-        Data.push_back(SpaceShip);
-        Texture* Alien = new Texture(renderer, "alien.bmp", 60, 60);
-        Data.push_back(Alien);
-        Texture* Missile = new Texture(renderer, "missile.bmp", 20, 50);
-        Data.push_back(Missile);
-    }
-    ~ResourceManager()
-    {
-        for (auto& i : Data)
-            i->~Texture();
-    }
-
-    Texture& GetTex(int ResID) const
-    {
-        return *Data[ResID];
-    }
-};
 
 
-
-class GameState : public SubSystem
+class GameState : public SubSystem, public InputHandler
 {
 };
 
@@ -385,6 +416,10 @@ class GameStatePlaying : public GameState
 public :
     void Update() {}
     void Render(RenderInterface* RI) {}
+    bool HandleInput(const SDL_Event& event)
+    {
+        return false;
+    }
 };
 
 class GameStateMenu : public GameState
@@ -398,9 +433,8 @@ class Game
     RenderInterface* RI;
     Viewport VP;
     Level Stage;
-    ResourceManager RM;
     
-    GameState* state;
+    GameState* State;
 
 public:
 
@@ -442,7 +476,7 @@ private:
 
     void init()
     {
-        state = new GameStatePlaying();
+        State = new GameStatePlaying();
 
         RI = new SDLRenderInterface();
         RI->CreateRenderer(&VP);
@@ -460,23 +494,19 @@ private:
             {
                 quit = 1;
             }
-            else if (event.type == SDL_KEYDOWN)
+            else
             {
-                if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_KP_6)
-                    Stage.PlayerMoveRight();
-                if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_KP_4)
-                    Stage.PlayerMoveLeft();
-                if (event.key.keysym.sym == SDLK_SPACE)
-                    Stage.CreateMissile(RM.GetTex(ResourceManager::ResID_Missile));
-                if (event.key.keysym.sym == SDLK_F9)
-                    DM.bShowObjectRect = !DM.bShowObjectRect;
+//                State->
+                bool isHandled=Stage.HandleInput(event);
             }
         }
+
+        State->Update();
 
         Stage.Update();
 
         Fps.ObjectCount = Stage.GetObjNum();
-        Fps.Update(); // FPS °è»ê
+        Fps.Update(); 
 
         return quit;
     }
@@ -487,7 +517,7 @@ private:
     {
         RI->PreRender();
 
-        state->Render(RI);
+        State->Render(RI);
 
         Stage.Render(RI);
 
