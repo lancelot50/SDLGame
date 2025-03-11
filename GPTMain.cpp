@@ -152,6 +152,7 @@ public:
 
 class InputHandler
 {
+public:
     virtual bool HandleInput(const SDL_Event& event) = 0;
 };
 
@@ -409,15 +410,41 @@ public :
 
 class GameState : public SubSystem, public InputHandler
 {
+public :
+    virtual void Init(const Viewport& VP) {}
+    virtual void Destroy() {}
+    virtual size_t GetObjNum() const { return 0; }
 };
 
 class GameStatePlaying : public GameState
 {
+    Level Stage;
 public :
-    void Update() {}
-    void Render(RenderInterface* RI) {}
+    void Init(const Viewport& VP)
+    {
+        Stage.Init(VP);
+        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
+        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
+    }
+
+    void Destroy()
+    {
+        Stage.Destroy();
+    }
+
+    size_t GetObjNum() const { return Stage.GetObjNum(); }
+
+    void Update()
+    {
+        Stage.Update();
+    }
+    void Render(RenderInterface* RI)
+    {
+        Stage.Render(RI);
+    }
     bool HandleInput(const SDL_Event& event)
     {
+        bool isHandled=Stage.HandleInput(event);
         return false;
     }
 };
@@ -432,7 +459,6 @@ class Game
 {
     RenderInterface* RI;
     Viewport VP;
-    Level Stage;
     
     GameState* State;
 
@@ -469,9 +495,7 @@ private:
     void initGameData()
     {
         RM.LoadResources(RI);
-        Stage.Init(VP);
-        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
-        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
+        State->Init(VP);
     }
 
     void init()
@@ -491,21 +515,15 @@ private:
         while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_QUIT)
-            {
                 quit = 1;
-            }
             else
-            {
-//                State->
-                bool isHandled=Stage.HandleInput(event);
-            }
+                State->HandleInput(event); 
+
         }
 
         State->Update();
 
-        Stage.Update();
-
-        Fps.ObjectCount = Stage.GetObjNum();
+        Fps.ObjectCount = State->GetObjNum();
         Fps.Update(); 
 
         return quit;
@@ -518,8 +536,6 @@ private:
         RI->PreRender();
 
         State->Render(RI);
-
-        Stage.Render(RI);
 
         Fps.Render(RI);
 
@@ -539,7 +555,7 @@ private:
 
     void terminate()
     {
-        Stage.Destroy();
+        State->Destroy();
 
         RI->Destroy();
         SDL_Quit();
