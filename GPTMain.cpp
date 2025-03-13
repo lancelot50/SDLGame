@@ -445,7 +445,13 @@ public :
     bool HandleInput(const SDL_Event& event)
     {
         bool isHandled=Stage.HandleInput(event);
-        return false;
+        if (event.type == SDL_KEYDOWN)
+        {
+            if (event.key.keysym.sym == SDLK_F10)
+            {
+            }
+        }
+        return isHandled;
     }
 };
 
@@ -453,6 +459,54 @@ class GameStateMenu : public GameState
 {
     void Update() {}
     void Render(RenderInterface* RI) {}
+    bool HandleInput(const SDL_Event& event) { return true; }
+};
+
+class StateManager : public SubSystem, public InputHandler
+{
+    GameState* State;
+
+    GameStatePlaying* pGameState;
+    GameStateMenu* pGameStateMenu;
+public :
+    StateManager()
+    {
+        pGameState = new GameStatePlaying();
+        pGameStateMenu = new GameStateMenu();
+
+        State = pGameState;
+    }
+
+    void Init(const Viewport& VP)
+    {
+        State->Init(VP);
+    }
+
+    void Destroy()
+    {
+        State->Destroy();
+    }
+
+    size_t GetObjNum() const
+    {
+        return State->GetObjNum();
+    }
+
+    void Update()
+    {
+        State->Update();
+    }
+
+    void Render(RenderInterface* RI)
+    {
+        State->Render(RI);
+    }
+
+    bool HandleInput(const SDL_Event& event)
+    {
+        bool isHandled=State->HandleInput(event);
+        return isHandled;
+    }
 };
 
 class Game
@@ -460,12 +514,11 @@ class Game
     RenderInterface* RI;
     Viewport VP;
     
-    GameState* State;
+    StateManager StateMgr;
 
 public:
 
 private:
-
     class FPS : public SubSystem
     {
         Uint32 lastFrameTime = 0; // 마지막 프레임의 시간
@@ -495,13 +548,11 @@ private:
     void initGameData()
     {
         RM.LoadResources(RI);
-        State->Init(VP);
+        StateMgr.Init(VP);
     }
 
     void init()
     {
-        State = new GameStatePlaying();
-
         RI = new SDLRenderInterface();
         RI->CreateRenderer(&VP);
         initGameData();
@@ -517,13 +568,14 @@ private:
             if (event.type == SDL_QUIT)
                 quit = 1;
             else
-                State->HandleInput(event); 
-
+            {
+                StateMgr.HandleInput(event);
+            }
         }
 
-        State->Update();
+        StateMgr.Update();
 
-        Fps.ObjectCount = State->GetObjNum();
+        Fps.ObjectCount = StateMgr.GetObjNum();
         Fps.Update(); 
 
         return quit;
@@ -535,7 +587,7 @@ private:
     {
         RI->PreRender();
 
-        State->Render(RI);
+        StateMgr.Render(RI);
 
         Fps.Render(RI);
 
@@ -555,7 +607,7 @@ private:
 
     void terminate()
     {
-        State->Destroy();
+        StateMgr.Destroy();
 
         RI->Destroy();
         SDL_Quit();
