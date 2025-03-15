@@ -581,8 +581,6 @@ private:
         return quit;
     }
 
-
-
     void Render()
     {
         RI->PreRender();
