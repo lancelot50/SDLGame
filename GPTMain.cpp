@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <string>
 
+#pragma comment(lib, "SDL3.lib")
+#pragma comment(lib, "SDL3_ttf.lib")
 
 
 struct DebugManager
@@ -140,7 +142,7 @@ class RenderInterface
 {
 public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
-    virtual void RenderText(const std::string& message, int x, int y) = 0;
+    virtual void RenderText(const std::string& message, float x, float y) = 0;
     virtual void RenderObject(Object* obj) = 0;
     virtual void Destroy() = 0;
 
@@ -370,11 +372,11 @@ public :
         SDL_DestroyWindow(window);
     }
 
-    void RenderText(const std::string & message, int x, int y)
+    void RenderText(const std::string & message, float x, float y)
     {
         SDL_Surface* textSurface = TTF_RenderText_Solid(font, message.c_str(), message.length(), textColor);
         SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-        SDL_FRect textRect = { x, y, textSurface->w, textSurface->h };
+        SDL_FRect textRect = { x, y, static_cast<float>(textSurface->w), static_cast<float>(textSurface->h) };
         SDL_RenderTexture(renderer, textTexture, NULL, &textRect);
 
         SDL_DestroySurface(textSurface);
@@ -383,7 +385,7 @@ public :
 
     void RenderObject(Object* Obj)
     {
-        SDL_FRect texRect = { Obj->Loc.x - Obj->pTex->W / 2, Obj->Loc.y - Obj->pTex->H / 2, Obj->pTex->W, Obj->pTex->H };
+        SDL_FRect texRect = { static_cast<float>(Obj->Loc.x - Obj->pTex->W / 2), static_cast<float>(Obj->Loc.y - Obj->pTex->H/2), static_cast<float>(Obj->pTex->W), static_cast<float>(Obj->pTex->H) };
         SDL_RenderTexture(renderer, Obj->pTex->Tex, nullptr, &texRect);
         if (DM.bShowObjectRect)
         {
@@ -407,19 +409,24 @@ public :
 };
 
 
-
+class StateManager;
 class GameState : public SubSystem, public InputHandler
 {
+    StateManager* pSM=nullptr;
 public :
+    GameState(StateManager* pStateMgr) { pSM = pStateMgr; }
     virtual void Init(const Viewport& VP) {}
     virtual void Destroy() {}
     virtual size_t GetObjNum() const { return 0; }
+    void GotoMenuState();
+    void GotoPlayingState();
 };
 
 class GameStatePlaying : public GameState
 {
     Level Stage;
 public :
+    GameStatePlaying(StateManager* pSM) : GameState(pSM) {}
     void Init(const Viewport& VP)
     {
         Stage.Init(VP);
@@ -449,6 +456,7 @@ public :
         {
             if (event.key.key == SDLK_F10)
             {
+                GotoMenuState();
             }
         }
         return isHandled;
@@ -457,24 +465,43 @@ public :
 
 class GameStateMenu : public GameState
 {
+public :
+    GameStateMenu(StateManager* pSM) : GameState(pSM) {}
     void Update() {}
-    void Render(RenderInterface* RI) {}
-    bool HandleInput(const SDL_Event& event) { return true; }
+    void Render(RenderInterface* RI)
+    {
+        const float menu_title_x = 500;
+        const float menu_title_y = 200;
+        RI->RenderText("Menu", menu_title_x, menu_title_y);
+        RI->RenderText("Press ESC goes back to Play", menu_title_x-100, menu_title_y+50);
+    }
+    bool HandleInput(const SDL_Event& event)
+    {
+        bool isHandled = false;
+        if (event.type == SDL_EVENT_KEY_DOWN)
+        {
+            if (event.key.key == SDLK_ESCAPE)
+            {
+                GotoPlayingState();
+            }
+        }
+        return isHandled;
+    }
 };
 
 class StateManager : public SubSystem, public InputHandler
 {
     GameState* State;
 
-    GameStatePlaying* pGameState;
+    GameStatePlaying* pGameStatePlaying;
     GameStateMenu* pGameStateMenu;
 public :
     StateManager()
     {
-        pGameState = new GameStatePlaying();
-        pGameStateMenu = new GameStateMenu();
+        pGameStatePlaying = new GameStatePlaying(this);
+        pGameStateMenu = new GameStateMenu(this);
 
-        State = pGameState;
+        State = pGameStatePlaying;
     }
 
     void Init(const Viewport& VP)
@@ -490,6 +517,15 @@ public :
     size_t GetObjNum() const
     {
         return State->GetObjNum();
+    }
+
+    void GotoMenuState()
+    {
+        State = pGameStateMenu;
+    }
+    void GotoPlayingState()
+    {
+        State = pGameStatePlaying;
     }
 
     void Update()
@@ -509,6 +545,17 @@ public :
     }
 };
 
+void GameState::GotoMenuState()
+{
+    pSM->GotoMenuState();
+}
+void GameState::GotoPlayingState()
+{
+    pSM->GotoPlayingState();
+}
+
+
+
 class Game
 {
     RenderInterface* RI;
@@ -522,7 +569,7 @@ private:
     class FPS : public SubSystem
     {
         Uint64 lastFrameTime = 0; // 마지막 프레임의 시간
-        int fps = 0; // 현재 FPS
+        __int64 fps = 0; // 현재 FPS
 
     public:
         size_t ObjectCount = 0;
