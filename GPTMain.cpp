@@ -1,5 +1,5 @@
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -62,7 +62,7 @@ public:
     {
         SDL_Surface* bmp = SDL_LoadBMP(Name.c_str());
         Tex = SDL_CreateTextureFromSurface(renderer, bmp);
-        SDL_FreeSurface(bmp);
+        SDL_DestroySurface(bmp);
 
         W = Width;
         H = Height;
@@ -293,15 +293,15 @@ public:
     bool HandleInput(const SDL_Event& event)
     {
         bool isHandled = false;
-        if (event.type == SDL_KEYDOWN)
+        if (event.type == SDL_EVENT_KEY_DOWN)
         {
-            if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_KP_6)
+            if (event.key.key == SDLK_RIGHT || event.key.key == SDLK_KP_6)
                 isHandled=PlayerMoveRight();
-            if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_KP_4)
+            if (event.key.key == SDLK_LEFT || event.key.key == SDLK_KP_4)
                 isHandled = PlayerMoveLeft();
-            if (event.key.keysym.sym == SDLK_SPACE)
+            if (event.key.key == SDLK_SPACE)
                 isHandled = CreateMissile(RM.GetTex(ResourceManager::ResID_Missile));
-            if (event.key.keysym.sym == SDLK_F9)
+            if (event.key.key == SDLK_F9)
             {
                 DM.bShowObjectRect = !DM.bShowObjectRect;
                 isHandled = true;
@@ -353,8 +353,8 @@ public :
     RenderInterface* CreateRenderer(Viewport* VP)
     {
         SDL_Init(SDL_INIT_VIDEO);
-        window = SDL_CreateWindow("Spaceship Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, VP->WIDTH, VP->HEIGHT, 0);
-        renderer = SDL_CreateRenderer(window, -1, 0);
+        window = SDL_CreateWindow("Spaceship Game", VP->WIDTH, VP->HEIGHT, 0);
+        renderer = SDL_CreateRenderer(window, nullptr);
 
         TTF_Init();
         font = TTF_OpenFont("arial.ttf", 24); // 폰트 파일은 실제 위치에 맞춰 지정해야 함
@@ -372,23 +372,23 @@ public :
 
     void RenderText(const std::string & message, int x, int y)
     {
-        SDL_Surface* textSurface = TTF_RenderText_Solid(font, message.c_str(), textColor);
+        SDL_Surface* textSurface = TTF_RenderText_Solid(font, message.c_str(), message.length(), textColor);
         SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-        SDL_Rect textRect = { x, y, textSurface->w, textSurface->h };
-        SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+        SDL_FRect textRect = { x, y, textSurface->w, textSurface->h };
+        SDL_RenderTexture(renderer, textTexture, NULL, &textRect);
 
-        SDL_FreeSurface(textSurface);
+        SDL_DestroySurface(textSurface);
         SDL_DestroyTexture(textTexture);
     }
 
     void RenderObject(Object* Obj)
     {
-        SDL_Rect texRect = { Obj->Loc.x - Obj->pTex->W / 2, Obj->Loc.y - Obj->pTex->H / 2, Obj->pTex->W, Obj->pTex->H };
-        SDL_RenderCopy(renderer, Obj->pTex->Tex, nullptr, &texRect);
+        SDL_FRect texRect = { Obj->Loc.x - Obj->pTex->W / 2, Obj->Loc.y - Obj->pTex->H / 2, Obj->pTex->W, Obj->pTex->H };
+        SDL_RenderTexture(renderer, Obj->pTex->Tex, nullptr, &texRect);
         if (DM.bShowObjectRect)
         {
             SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-            SDL_RenderDrawRect(renderer, &texRect);
+            SDL_RenderRect(renderer, &texRect);
         }
     }
 
@@ -445,9 +445,9 @@ public :
     bool HandleInput(const SDL_Event& event)
     {
         bool isHandled=Stage.HandleInput(event);
-        if (event.type == SDL_KEYDOWN)
+        if (event.type == SDL_EVENT_KEY_DOWN)
         {
-            if (event.key.keysym.sym == SDLK_F10)
+            if (event.key.key == SDLK_F10)
             {
             }
         }
@@ -521,7 +521,7 @@ public:
 private:
     class FPS : public SubSystem
     {
-        Uint32 lastFrameTime = 0; // 마지막 프레임의 시간
+        Uint64 lastFrameTime = 0; // 마지막 프레임의 시간
         int fps = 0; // 현재 FPS
 
     public:
@@ -531,7 +531,7 @@ private:
         ~FPS() { }
         void Update() override
         {
-            Uint32 currentFrameTime = SDL_GetTicks();
+            Uint64 currentFrameTime = SDL_GetTicks();
             if (currentFrameTime - lastFrameTime > 0)
                 fps = 1000 / (currentFrameTime - lastFrameTime); // 1000ms를 프레임 시간으로 나눔
             lastFrameTime = currentFrameTime;
@@ -565,7 +565,7 @@ private:
 
         while (SDL_PollEvent(&event))
         {
-            if (event.type == SDL_QUIT)
+            if (event.type == SDL_EVENT_QUIT)
                 quit = 1;
             else
             {
