@@ -141,16 +141,17 @@ public:
 
 struct Tile
 {
-    static const int Width = 20;
-    std::string TileName;
-    int Property;
+    static const int Width = 16;
+//    static const int Width = 32;
+    int BitmapIdx=0;
+    int MapIdx = 0;
+    int Property=0;
 };
 
 struct GrassTile : public Tile
 {
     GrassTile()
     {
-        TileName = "grass";
     }
 };
 
@@ -160,7 +161,7 @@ public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
     virtual void RenderText(const std::string& message, float x, float y) = 0;
     virtual void RenderObject(Object* obj) = 0;
-    virtual void RenderTile(Tile* pTile) = 0;
+    virtual void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) = 0;
     virtual void Destroy() = 0;
 
     virtual void PreRender() = 0;
@@ -205,7 +206,8 @@ public:
         Texture* Missile = new Texture(renderer, "missile.bmp", 20, 50);
         Data.push_back(Missile);
 
-        Texture* Tile = new Texture(renderer, "buch-outdoor.bmp", 384, 192);
+      Texture* Tile = new Texture(renderer, "buch-outdoor.bmp", 384, 192);
+//        Texture* Tile = new Texture(renderer, "buch-outdoor2x.bmp", 384*2, 192*2);
         Data.push_back(Tile);
     }
     ~ResourceManager()
@@ -235,16 +237,16 @@ class Level : public SubSystem, public InputHandler
     static const int MapH = 20;
     int pTile[MapW*MapH] = 
     {
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,  1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,
+        20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,
+        40 , 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
 
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -384,17 +386,22 @@ public:
     void Render(RenderInterface* RI) override
     {
 
-        for (int i = 0; i < MapH; ++i)
+        for (int j = 0; j < MapH; ++j)
         {
-            for (int j = 0; j < MapW; ++j)
-                RI->RenderTile(new Tile());//  pTile[i*MapW + j];
+            for (int i = 0; i < MapW; ++i)
+            {
+                Tile tile;
+                tile.BitmapIdx = pTile[j * MapW + i];
+                tile.MapIdx = j * MapW + i;
+                RI->RenderTile(&tile,i,j, MapW, MapH);//  ;
+            }
         }
 
-        for (Object* obj : objects)
-        {
-            if (obj->show)
-                RI->RenderObject(obj);
-        }
+        //for (Object* obj : objects)
+        //{
+        //    if (obj->show)
+        //        RI->RenderObject(obj);
+        //}
     }
 };
 
@@ -418,7 +425,7 @@ public :
         renderer = SDL_CreateRenderer(window, nullptr);
 
         TTF_Init();
-        font = TTF_OpenFont("arial.ttf", 24); // 폰트 파일은 실제 위치에 맞춰 지정해야 함
+        font = TTF_OpenFont("arial.ttf", 12); // 폰트 파일은 실제 위치에 맞춰 지정해야 함
 
         return this;
     }
@@ -453,10 +460,29 @@ public :
         }
     }
 
-    void RenderTile(Tile* pTile) override
+    void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) override
     {
-        SDL_FRect texRect = {};
-        SDL_RenderTexture(renderer, RM.GetTex(ResourceManager::ResID_Tile).Tex , nullptr, &texRect);
+        Texture& mapTex = RM.GetTex(ResourceManager::ResID_Tile);
+        int mapTexW = mapTex.W;
+        int mapTileTexW = mapTex.W / pTile->Width;
+        float srcX = static_cast<float>((pTile->BitmapIdx * pTile->Width)%mapTexW);
+        
+//        int bitmapW = mapTexW / mapTileTexW;
+        float srcY = static_cast<float>(pTile->BitmapIdx/mapTileTexW)*pTile->Width;
+        SDL_FRect texSrcRect = {srcX, srcY, static_cast<float>(pTile->Width), static_cast<float>(pTile->Width)};
+
+        float tileSize = pTile->Width * 3;
+        float x = X*tileSize;
+        float y = Y*tileSize;
+        SDL_FRect texDestRect = {x, y, tileSize, tileSize};
+        SDL_RenderTexture(renderer, RM.GetTex(ResourceManager::ResID_Tile).Tex , &texSrcRect, &texDestRect);
+        if (DM.bShowObjectRect)
+        {
+            SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+            SDL_RenderRect(renderer, &texDestRect);
+            std::string str=std::to_string(X)+","+std::to_string(Y)+"  "+ std::to_string(pTile->BitmapIdx);
+            RenderText(str, x , y + tileSize /4 );
+        }
     }
 
     void PreRender() override
@@ -699,7 +725,7 @@ private:
 
         StateMgr.Render(RI);
 
-        Fps.Render(RI);
+//        Fps.Render(RI);
 
         RI->PostRender();
     }
