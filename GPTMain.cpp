@@ -138,12 +138,29 @@ public:
     }
 };
 
+
+struct Tile
+{
+    static const int Width = 20;
+    std::string TileName;
+    int Property;
+};
+
+struct GrassTile : public Tile
+{
+    GrassTile()
+    {
+        TileName = "grass";
+    }
+};
+
 class RenderInterface
 {
 public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
     virtual void RenderText(const std::string& message, float x, float y) = 0;
     virtual void RenderObject(Object* obj) = 0;
+    virtual void RenderTile(Tile* pTile) = 0;
     virtual void Destroy() = 0;
 
     virtual void PreRender() = 0;
@@ -176,6 +193,7 @@ public:
         ResID_SpaceShip = 0,
         ResID_Alien = 1,
         ResID_Missile = 2,
+        ResID_Tile=3,
     };
     void LoadResources(RenderInterface* RI)
     {
@@ -186,6 +204,9 @@ public:
         Data.push_back(Alien);
         Texture* Missile = new Texture(renderer, "missile.bmp", 20, 50);
         Data.push_back(Missile);
+
+        Texture* Tile = new Texture(renderer, "buch-outdoor.bmp", 384, 192);
+        Data.push_back(Tile);
     }
     ~ResourceManager()
     {
@@ -201,20 +222,6 @@ public:
 ResourceManager RM;
 
 
-struct Tile
-{
-    static const int Width = 20;
-    std::string TileName;
-    int Property;
-};
-
-struct GrassTile : public Tile
-{
-    GrassTile()
-    {
-        TileName = "grass";
-    }
-};
 
 
 class Level : public SubSystem, public InputHandler
@@ -223,6 +230,33 @@ class Level : public SubSystem, public InputHandler
 
     Object* spaceship;
     std::vector<Object*> objects;
+
+    static const int MapW = 20;
+    static const int MapH = 20;
+    int pTile[MapW*MapH] = 
+    {
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    };
 
 public:
     int Width = 0;
@@ -349,6 +383,13 @@ public:
 
     void Render(RenderInterface* RI) override
     {
+
+        for (int i = 0; i < MapH; ++i)
+        {
+            for (int j = 0; j < MapW; ++j)
+                RI->RenderTile(new Tile());//  pTile[i*MapW + j];
+        }
+
         for (Object* obj : objects)
         {
             if (obj->show)
@@ -368,7 +409,9 @@ class SDLRenderInterface : public RenderInterface
 
 public :
     SDLRenderInterface() {}
-    RenderInterface* CreateRenderer(Viewport* VP)
+
+
+    RenderInterface* CreateRenderer(Viewport* VP) override
     {
         SDL_Init(SDL_INIT_VIDEO);
         window = SDL_CreateWindow("Spaceship Game", VP->WIDTH, VP->HEIGHT, 0);
@@ -379,7 +422,7 @@ public :
 
         return this;
     }
-    void Destroy()
+    void Destroy() override
     {
         TTF_CloseFont(font);
         TTF_Quit();
@@ -388,7 +431,7 @@ public :
         SDL_DestroyWindow(window);
     }
 
-    void RenderText(const std::string & message, float x, float y)
+    void RenderText(const std::string & message, float x, float y) override
     {
         SDL_Surface* textSurface = TTF_RenderText_Solid(font, message.c_str(), message.length(), textColor);
         SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
@@ -399,7 +442,7 @@ public :
         SDL_DestroyTexture(textTexture);
     }
 
-    void RenderObject(Object* Obj)
+    void RenderObject(Object* Obj) override
     {
         SDL_FRect texRect = { static_cast<float>(Obj->Loc.x - Obj->pTex->W / 2), static_cast<float>(Obj->Loc.y - Obj->pTex->H/2), static_cast<float>(Obj->pTex->W), static_cast<float>(Obj->pTex->H) };
         SDL_RenderTexture(renderer, Obj->pTex->Tex, nullptr, &texRect);
@@ -410,13 +453,19 @@ public :
         }
     }
 
-    void PreRender()
+    void RenderTile(Tile* pTile) override
+    {
+        SDL_FRect texRect = {};
+        SDL_RenderTexture(renderer, RM.GetTex(ResourceManager::ResID_Tile).Tex , nullptr, &texRect);
+    }
+
+    void PreRender() override
     {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
     }
 
-    void PostRender()
+    void PostRender() override
     {
         SDL_RenderPresent(renderer);
     }
