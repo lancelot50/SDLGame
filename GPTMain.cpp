@@ -201,6 +201,22 @@ public:
 ResourceManager RM;
 
 
+struct Tile
+{
+    static const int Width = 20;
+    std::string TileName;
+    int Property;
+};
+
+struct GrassTile : public Tile
+{
+    GrassTile()
+    {
+        TileName = "grass";
+    }
+};
+
+
 class Level : public SubSystem, public InputHandler
 {
     Location StartLoc;
