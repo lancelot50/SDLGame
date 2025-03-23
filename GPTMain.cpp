@@ -138,14 +138,8 @@ public:
     }
 };
 
-struct Tile
+struct ClickableArea
 {
-    static const int Width = 16;
-//    static const int Width = 32;
-    int BitmapIdx=0;
-    int MapIdx = 0;
-    int Property=0;
-    SDL_FRect TexSrcRect = { 0,0,0,0 };
     SDL_FRect TexDestRect = { 0,0,0,0 };
 
     bool IsIn(float X, float Y)
@@ -155,6 +149,17 @@ struct Tile
         else
             return false;
     }
+};
+
+
+struct Tile : public ClickableArea
+{
+    static const int Width = 16;
+//    static const int Width = 32;
+    int BitmapIdx=0;
+    int MapIdx = 0;
+    int Property=0;
+    SDL_FRect TexSrcRect = { 0,0,0,0 };
 
     virtual bool CanPlaceHere() const { return true; }
 };
@@ -203,19 +208,19 @@ public:
 };
 
 
-class Window : public SubSystem
+class Window : public SubSystem, public ClickableArea
 {
     Texture* pTex = nullptr;
 
 public :
-    SDL_FRect Size;
+//    SDL_FRect Size;
     std::string Title;
     Location TitleLoc;
 
     Window(const std::string& a_Title, const SDL_FRect& a_Size)
     {
         Title = a_Title;
-        Size = a_Size;
+        TexDestRect = a_Size;
         TitleLoc = { a_Size.x + a_Size.w/2, a_Size.y + 20 };
     }
 
@@ -224,9 +229,9 @@ public :
     {
         RI->RenderUI(this);
         if (pTex)
-            RI->RenderTexture(pTex, &Size);
+            RI->RenderTexture(pTex, &TexDestRect);
         else
-            RI->RenderBox(&Size, 255, 255, 255, 255);
+            RI->RenderBox(&TexDestRect, 255, 255, 255, 255);
         if(Title.length()>0)
             RI->RenderText(Title, TitleLoc.x, TitleLoc.y);
     }
@@ -682,7 +687,7 @@ public :
 
 class GameStateMenu : public GameState
 {
-    std::vector<Window*> pWindowArray;
+    std::vector<Window*> vpWindowArray;
 public :
     GameStateMenu(StateManager* pSM) : GameState(pSM)
     {
@@ -695,24 +700,24 @@ public :
 
         Window* pMenuWnd = new Window("Menu", { start.x, start.y, menuWndW, menuWndH });
         size_t len = pMenuWnd->Title.length();
-        pWindowArray.push_back(pMenuWnd);
+        vpWindowArray.push_back(pMenuWnd);
 
         const float btnWndW = 200;
         const float btnWndH = 50;
-        Location btnLoc = { pMenuWnd->Size.x + pMenuWnd->Size.w / 2 - btnWndW / 2, pMenuWnd->Size.y + 300 };
+        Location btnLoc = { pMenuWnd->TexDestRect.x + pMenuWnd->TexDestRect.w / 2 - btnWndW / 2, pMenuWnd->TexDestRect.y + 300 };
         Window* pReturnToGameWnd = new Window("Press ESC goes back to Play", { btnLoc.x, btnLoc.y, btnWndW, btnWndH });
-        pWindowArray.push_back(pReturnToGameWnd);
+        vpWindowArray.push_back(pReturnToGameWnd);
     }
 
     void Destroy() override
     {
-        for (auto& pWnd : pWindowArray)
+        for (auto& pWnd : vpWindowArray)
             delete pWnd;
     }
     void Update() {}
     void Render(RenderInterface* RI)
     {
-        for (auto& wnd : pWindowArray)
+        for (auto& wnd : vpWindowArray)
             wnd->Render(RI);
     }
     bool HandleInput(const SDL_Event& event)
@@ -731,6 +736,30 @@ public :
                 isHandled = true;
             }
         }
+
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+        {
+            if (event.button.button == SDL_BUTTON_LEFT)
+            {
+                float x = event.button.x;
+                float y = event.button.y;
+
+                for (auto it=vpWindowArray.rbegin(); it!=vpWindowArray.rend(); ++it )
+                {
+                    if ((*it)->IsIn(x, y))
+                    {
+                        if ((*it)->Title == "Press ESC goes back to Play")
+                        {
+                            GotoPlayingState();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+
+
         return isHandled;
     }
 };
