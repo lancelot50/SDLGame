@@ -16,7 +16,7 @@ struct DebugManager
 DebugManager DM;
 
 
-int checkCollision(const SDL_Rect& rect1, const SDL_Rect& rect2)
+int checkCollision(const SDL_FRect& rect1, const SDL_FRect& rect2)
 {
     if (rect1.x + rect1.w >= rect2.x &&
         rect2.x + rect2.w >= rect1.x &&
@@ -36,8 +36,8 @@ public :
 
 struct Location
 {
-    int x = 0;
-    int y = 0;
+    float x = 0;
+    float y = 0;
     void operator+=(const Location& In)
     {
         x += In.x;
@@ -58,9 +58,9 @@ class Texture
 {
 public:
     SDL_Texture* Tex = nullptr;
-    int W = 0;
-    int H = 0;
-    Texture(SDL_Renderer* renderer, std::string Name, int Width, int Height)
+    float W = 0;
+    float H = 0;
+    Texture(SDL_Renderer* renderer, std::string Name, float Width, float Height)
     {
         SDL_Surface* bmp = SDL_LoadBMP(Name.c_str());
         Tex = SDL_CreateTextureFromSurface(renderer, bmp);
@@ -77,6 +77,8 @@ public:
 
 class Object
 {
+protected :
+    SDL_FRect SrcRect = { 0,0,0,0 };
 public:
     int dx = 0;
     int dy = 0;
@@ -84,23 +86,19 @@ public:
     Location Loc;
 
     Texture* pTex=nullptr;
-    int TexWidth=0;
-    int TexHeight=0;
-
-    Rect rect;
-
-    int ResourceID = 0;
 
     virtual ~Object() { }
 
+    int MapIndex=0;
+
     virtual void Update() {}
-    void Init(Texture& Tex, const Location& InitLoc, const Rect& StageRect)
+    void Init(Texture& Tex, int InitialMapIndex)
     {
         pTex = &Tex;
-
-        Loc = InitLoc;
-        rect = StageRect;
+        MapIndex = InitialMapIndex;
     }
+
+    SDL_FRect GetSrcRect() const { return SrcRect; }
 
     void MoveDelta(const Location& Delta)
     {
@@ -113,17 +111,22 @@ public:
     }
 };
 
+
+class Spearman : public Object
+{
+public :
+    Spearman()
+    {
+        SrcRect= { 32,256, 32,32 };
+    }
+};
+
 class Alien : public Object
 {
 public:
     void Update() override
     {
         Loc.x += dx;
-        if (Loc.x-pTex->W/2 <= 0 || Loc.x+pTex->W/2 >= rect.w)
-        {
-            dx *= -1;
-            Loc.y += 10;
-        }
     }
 };
 
@@ -132,12 +135,8 @@ class Missile : public Object
 public:
     void Update() override
     {
-        Loc.y += dy;
-        if (Loc.y < 0)
-            show = false;
     }
 };
-
 
 struct Tile
 {
@@ -146,14 +145,26 @@ struct Tile
     int BitmapIdx=0;
     int MapIdx = 0;
     int Property=0;
+    SDL_FRect TexSrcRect = { 0,0,0,0 };
+    SDL_FRect TexDestRect = { 0,0,0,0 };
+
+    bool IsIn(float X, float Y)
+    {
+        if ((TexDestRect.x <= X && X <= TexDestRect.x + TexDestRect.w) && (TexDestRect.y <= Y && Y <= TexDestRect.y + TexDestRect.h))
+            return true;
+        else
+            return false;
+    }
+
+    virtual bool CanPlaceHere() const { return true; }
 };
 
-struct GrassTile : public Tile
+struct Castle : public Tile
 {
-    GrassTile()
-    {
-    }
+    bool CanPlaceHere() const override { return false; }
 };
+
+class Window;
 
 class RenderInterface
 {
@@ -162,8 +173,12 @@ protected:
 public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
     virtual void RenderText(const std::string& message, float x, float y) = 0;
-    virtual void RenderObject(Object* obj) = 0;
+    virtual void RenderObject(Object* obj, Tile* pTile) = 0;
     virtual void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) = 0;
+    virtual void RenderUI(Window* pWnd) = 0;
+    virtual void RenderTexture(Texture* pTex, SDL_FRect* pDestRect) = 0;
+    virtual void RenderBox(SDL_FRect* pFRect, Uint8 R, Uint8 G, Uint8 B, Uint8 A ) = 0;
+
     virtual void Destroy() = 0;
 
     virtual void PreRender() = 0;
@@ -172,7 +187,6 @@ public:
     virtual void* GetRenderer() = 0;
 
     Viewport* GetViewport() const { return _VP; }
-        
 };
 
 class InputHandler
@@ -189,6 +203,35 @@ public:
 };
 
 
+class Window : public SubSystem
+{
+    Texture* pTex = nullptr;
+
+public :
+    SDL_FRect Size;
+    std::string Title;
+    Location TitleLoc;
+
+    Window(const std::string& a_Title, const SDL_FRect& a_Size)
+    {
+        Title = a_Title;
+        Size = a_Size;
+        TitleLoc = { a_Size.x + a_Size.w/2, a_Size.y + 20 };
+    }
+
+    void Update() override {}
+    void Render(RenderInterface* RI) override
+    {
+        RI->RenderUI(this);
+        if (pTex)
+            RI->RenderTexture(pTex, &Size);
+        else
+            RI->RenderBox(&Size, 255, 255, 255, 255);
+        if(Title.length()>0)
+            RI->RenderText(Title, TitleLoc.x, TitleLoc.y);
+    }
+};
+
 
 class ResourceManager
 {
@@ -200,6 +243,7 @@ public:
         ResID_Alien = 1,
         ResID_Missile = 2,
         ResID_Tile=3,
+        ResID_Army=4,
     };
     void LoadResources(RenderInterface* RI)
     {
@@ -211,9 +255,12 @@ public:
         Texture* Missile = new Texture(renderer, "missile.bmp", 20, 50);
         Data.push_back(Missile);
 
-      Texture* Tile = new Texture(renderer, "buch-outdoor.bmp", 384, 192);
-//        Texture* Tile = new Texture(renderer, "buch-outdoor2x.bmp", 384*2, 192*2);
+        Texture* Tile = new Texture(renderer, "buch-outdoor.bmp", 384, 192);
+//      Texture* Tile = new Texture(renderer, "buch-outdoor2x.bmp", 384*2, 192*2);
         Data.push_back(Tile);
+
+        Texture* Army = new Texture(renderer, "Army.bmp", 448, 448);
+        Data.push_back(Army);
     }
     ~ResourceManager()
     {
@@ -233,14 +280,12 @@ ResourceManager RM;
 
 class Level : public SubSystem, public InputHandler
 {
-    Location StartLoc;
-
     Object* spaceship;
     std::vector<Object*> objects;
 
     static const int MapW = 20;
     static const int MapH = 20;
-    int pTile[MapW*MapH] = 
+    int pMap[MapW*MapH] = 
     {
         0,  1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,
         20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,
@@ -265,6 +310,8 @@ class Level : public SubSystem, public InputHandler
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
     };
 
+    std::vector<Tile*> vTileMap;
+
 public:
     int Width = 0;
     int Height = 0;
@@ -273,54 +320,90 @@ public:
     {
         Width = VP.WIDTH;
         Height = VP.HEIGHT;
+      
+        initMap();
+    }
 
-        StartLoc=Location{ Width / 2, Height - 100 };
+    void initMap()
+    {
+        Texture& mapTex = RM.GetTex(ResourceManager::ResID_Tile);
+
+        for (int j = 0; j < MapH; ++j)
+        {
+            for (int i = 0; i < MapW; ++i)
+            {
+                int bitmapIdx = pMap[j * MapW + i];
+                Tile* pTile = nullptr;
+                if (bitmapIdx == 205)
+                    pTile = new Castle();
+                else
+                    pTile=new Tile();
+                pTile->BitmapIdx = bitmapIdx;
+                pTile->MapIdx = j * MapW + i;
+
+                int mapTexW = static_cast<int>(mapTex.W);
+                int mapTileTexW = mapTexW / pTile->Width;
+                float srcX = static_cast<float>((pTile->BitmapIdx * pTile->Width) % mapTexW);
+                float srcY = static_cast<float>(pTile->BitmapIdx / mapTileTexW) * pTile->Width;
+                pTile->TexSrcRect = { srcX, srcY, static_cast<float>(pTile->Width), static_cast<float>(pTile->Width) };
+
+                float tileSize = pTile->Width * 3;
+                float x = i * tileSize;
+                float y = j * tileSize;
+                pTile->TexDestRect = { x, y, tileSize, tileSize };
+
+                vTileMap.push_back(pTile);
+            }
+        }
     }
 
     void CreateSpaceShip(Texture& Tex)
     {
         spaceship = new Object();
-        spaceship->Init(Tex, StartPos(), Rect{0,0,Width, Height});
+//        spaceship->Init(Tex, StartPos(), Rect{0,0,Width, Height});
         objects.push_back(spaceship);
     }
     void CreateAliens(Texture& Tex)
     {
-        for (int i = 0; i < 10; i++)
-        {
-            Alien* alien = new Alien();
-            alien->Init(Tex, Location{ 50 + i * 70, 50 }, Rect{ 0,0,Width, Height });
-            alien->dx = 1;
-            objects.push_back(alien);
-        }
+        Alien* alien = new Alien();
+    //  alien->Init(Tex, Location{ 50 + i * 70, 50 }, Rect{ 0,0,Width, Height });
+        objects.push_back(alien);
+
     }
+
+    void createSpearman(int MapIndex)
+    {
+        Spearman* spearman = new Spearman();
+        spearman->Init(RM.GetTex(ResourceManager::ResID_Army), MapIndex);
+        objects.push_back(spearman);
+    }
+
+
 
     void Destroy()
     {
         for (Object* obj : objects)
             delete obj;
         objects.clear();
+
+        for (auto& i : vTileMap)
+            delete i;
+        vTileMap.clear();
     }
 
-    const Location& StartPos() const { return StartLoc; }
     size_t GetObjNum() const {  return objects.size(); }
 
     bool PlayerMoveLeft()
     {
-        spaceship->MoveDelta({ -30, 0 });
         return true;
     }
     bool PlayerMoveRight()
     {
-        spaceship->MoveDelta({ 30, 0 });
         return true;
     }
 
     bool CreateMissile(Texture& Tex)
     {
-        Missile* missile = new Missile();
-        missile->Init(Tex, spaceship->Loc, Rect{0,0,Width, Height});
-        missile->dy = -10;
-        objects.push_back(missile);
         return true;
     }
 
@@ -336,8 +419,8 @@ public:
                     Alien* alien = dynamic_cast<Alien*>(target);
                     if (alien && alien->show)
                     {
-                        SDL_Rect missileRect = { missile->Loc.x, missile->Loc.y, missile->pTex->W, missile->pTex->H };
-                        SDL_Rect alienRect = { alien->Loc.x, alien->Loc.y, alien->pTex->W, alien->pTex->H };
+                        SDL_FRect missileRect = { missile->Loc.x, missile->Loc.y, missile->pTex->W, missile->pTex->H };
+                        SDL_FRect alienRect = { alien->Loc.x, alien->Loc.y, alien->pTex->W, alien->pTex->H };
                         if (checkCollision(missileRect, alienRect))
                         {
                             missile->show = false;
@@ -370,7 +453,31 @@ public:
         {
             if(event.button.button == SDL_BUTTON_LEFT)
             {
-                std::cout << "x:" << event.button.x << ", y:" << event.button.y << std::endl;
+                float x = event.button.x;
+                float y = event.button.y;
+
+                std::cout << "x:" << x << ", y:" << y << std::endl;
+                for (auto& i : vTileMap)
+                {
+                    if (i->IsIn(x, y))
+                    {
+                        std::cout << "click map Index : " << i->MapIdx << std::endl;
+
+                        bool exist = false;
+                        for (auto& obj : objects)
+                        {
+                            if (obj->MapIndex == i->MapIdx)
+                            {
+                                std::cout << "Exist spearman!" << std::endl;
+                                exist = true;
+                                break;
+                            }
+                        }
+                        if(!exist && i->CanPlaceHere())
+                            createSpearman(i->MapIdx);
+                    }
+                }
+
             }
         }
 
@@ -397,23 +504,19 @@ public:
 
     void Render(RenderInterface* RI) override
     {
-
         for (int j = 0; j < MapH; ++j)
         {
             for (int i = 0; i < MapW; ++i)
             {
-                Tile tile;
-                tile.BitmapIdx = pTile[j * MapW + i];
-                tile.MapIdx = j * MapW + i;
-                RI->RenderTile(&tile,i,j, MapW, MapH);//  ;
+                //Tile tile;
+                //tile.BitmapIdx = pMap[j * MapW + i];
+                //tile.MapIdx = j * MapW + i;
+                RI->RenderTile(vTileMap[j* MapW + i],i,j, MapW, MapH);//  ;
             }
         }
 
-        //for (Object* obj : objects)
-        //{
-        //    if (obj->show)
-        //        RI->RenderObject(obj);
-        //}
+        for (Object* obj : objects)
+            RI->RenderObject(obj, vTileMap[obj->MapIndex]);
     }
 };
 
@@ -428,7 +531,6 @@ class SDLRenderInterface : public RenderInterface
 
 public :
     SDLRenderInterface() {}
-
 
     RenderInterface* CreateRenderer(Viewport* VP) override
     {
@@ -451,52 +553,63 @@ public :
         SDL_DestroyWindow(window);
     }
 
-    void RenderText(const std::string & message, float x, float y) override
+    void RenderText(const std::string & message, float x, float y) override     // x,y °¡ Áß¾Ó
     {
         SDL_Surface* textSurface = TTF_RenderText_Solid(font, message.c_str(), message.length(), textColor);
         SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-        SDL_FRect textRect = { x, y, static_cast<float>(textSurface->w), static_cast<float>(textSurface->h) };
+        SDL_FRect textRect = { static_cast<float>(x  - textSurface->w /2) , static_cast<float>(y- textSurface->h/2), static_cast<float>(textSurface->w), static_cast<float>(textSurface->h)};
         SDL_RenderTexture(renderer, textTexture, NULL, &textRect);
 
         SDL_DestroySurface(textSurface);
         SDL_DestroyTexture(textTexture);
-    }
 
-    void RenderObject(Object* Obj) override
-    {
-        SDL_FRect texRect = { static_cast<float>(Obj->Loc.x - Obj->pTex->W / 2), static_cast<float>(Obj->Loc.y - Obj->pTex->H/2), static_cast<float>(Obj->pTex->W), static_cast<float>(Obj->pTex->H) };
-        SDL_RenderTexture(renderer, Obj->pTex->Tex, nullptr, &texRect);
         if (DM.bShowObjectRect)
         {
             SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-            SDL_RenderRect(renderer, &texRect);
+            SDL_RenderRect(renderer, &textRect);
+        }
+    }
+
+    void RenderObject(Object* Obj, Tile*pTile) override
+    {
+        SDL_FRect srcRect= Obj->GetSrcRect();
+        SDL_RenderTexture(renderer, Obj->pTex->Tex, &srcRect, &pTile->TexDestRect);
+        if (DM.bShowObjectRect)
+        {
+            SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+            SDL_RenderRect(renderer, &pTile->TexDestRect);
         }
     }
 
     void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) override
     {
-        Texture& mapTex = RM.GetTex(ResourceManager::ResID_Tile);
-        int mapTexW = mapTex.W;
-        int mapTileTexW = mapTex.W / pTile->Width;
-        float srcX = static_cast<float>((pTile->BitmapIdx * pTile->Width)%mapTexW);
-        
-//        int bitmapW = mapTexW / mapTileTexW;
-        float srcY = static_cast<float>(pTile->BitmapIdx/mapTileTexW)*pTile->Width;
-        SDL_FRect texSrcRect = {srcX, srcY, static_cast<float>(pTile->Width), static_cast<float>(pTile->Width)};
-
-        float tileSize = pTile->Width * 3;
-        float x = X*tileSize;
-        float y = Y*tileSize;
-        SDL_FRect texDestRect = {x, y, tileSize, tileSize};
-        SDL_RenderTexture(renderer, RM.GetTex(ResourceManager::ResID_Tile).Tex , &texSrcRect, &texDestRect);
+        SDL_RenderTexture(renderer, RM.GetTex(ResourceManager::ResID_Tile).Tex , &pTile->TexSrcRect, &pTile->TexDestRect);
         if (DM.bShowObjectRect)
         {
             SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-            SDL_RenderRect(renderer, &texDestRect);
-            std::string str=std::to_string(X)+","+std::to_string(Y)+"  "+ std::to_string(pTile->BitmapIdx);
-            RenderText(str, x , y + tileSize /4 );
+            SDL_RenderRect(renderer, &pTile->TexDestRect);
+            std::string str=std::to_string(X)+","+std::to_string(Y)+" "+ std::to_string(pTile->BitmapIdx);
+            RenderText(str, pTile->TexDestRect.x+20 , pTile->TexDestRect.y + 10 );
         }
     }
+
+    void RenderUI(Window* pWnd) override
+    {
+    }
+
+    void RenderTexture(Texture* pTex, SDL_FRect* pDestRect) override
+    {
+        SDL_FRect srcRect = { 0,0, static_cast<float>(pTex->W), static_cast<float>(pTex->H)};
+        SDL_RenderTexture(renderer, pTex->Tex, &srcRect, pDestRect);
+    }
+    void RenderBox(SDL_FRect* pFRect, Uint8 R, Uint8 G, Uint8 B, Uint8 A) override
+    {
+        SDL_SetRenderDrawColor(renderer, R, G, B, A);
+        SDL_RenderRect(renderer, pFRect);
+    }
+
+
+
 
     void PreRender() override
     {
@@ -534,8 +647,8 @@ public :
     void Init(const Viewport& VP)
     {
         Stage.Init(VP);
-        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
-        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
+//        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
+//        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
     }
 
     void Destroy()
@@ -569,15 +682,38 @@ public :
 
 class GameStateMenu : public GameState
 {
+    std::vector<Window*> pWindowArray;
 public :
-    GameStateMenu(StateManager* pSM) : GameState(pSM) {}
+    GameStateMenu(StateManager* pSM) : GameState(pSM)
+    {
+    }
+    void Init(const Viewport& VP) override
+    {
+        const float menuWndW = 500;
+        const float menuWndH = 500;
+        Location start = { VP.WIDTH / 2 - menuWndW / 2, 100 };
+
+        Window* pMenuWnd = new Window("Menu", { start.x, start.y, menuWndW, menuWndH });
+        size_t len = pMenuWnd->Title.length();
+        pWindowArray.push_back(pMenuWnd);
+
+        const float btnWndW = 200;
+        const float btnWndH = 50;
+        Location btnLoc = { pMenuWnd->Size.x + pMenuWnd->Size.w / 2 - btnWndW / 2, pMenuWnd->Size.y + 300 };
+        Window* pReturnToGameWnd = new Window("Press ESC goes back to Play", { btnLoc.x, btnLoc.y, btnWndW, btnWndH });
+        pWindowArray.push_back(pReturnToGameWnd);
+    }
+
+    void Destroy() override
+    {
+        for (auto& pWnd : pWindowArray)
+            delete pWnd;
+    }
     void Update() {}
     void Render(RenderInterface* RI)
     {
-        const float menu_title_x = 500;
-        const float menu_title_y = 200;
-        RI->RenderText("Menu", menu_title_x, menu_title_y);
-        RI->RenderText("Press ESC goes back to Play", menu_title_x-100, menu_title_y+50);
+        for (auto& wnd : pWindowArray)
+            wnd->Render(RI);
     }
     bool HandleInput(const SDL_Event& event)
     {
@@ -587,6 +723,12 @@ public :
             if (event.key.key == SDLK_ESCAPE)
             {
                 GotoPlayingState();
+                isHandled = true;
+            }
+            if (event.key.key == SDLK_F9)
+            {
+                DM.bShowObjectRect = !DM.bShowObjectRect;
+                isHandled = true;
             }
         }
         return isHandled;
@@ -604,13 +746,13 @@ public :
     {
         pGameStatePlaying = new GameStatePlaying(this);
         pGameStateMenu = new GameStateMenu(this);
-
-        State = pGameStatePlaying;
     }
 
     void Init(const Viewport& VP)
     {
-        State->Init(VP);
+        pGameStateMenu->Init(VP);
+        pGameStatePlaying->Init(VP);
+        State = pGameStatePlaying;
     }
 
     void Destroy()
