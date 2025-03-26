@@ -121,6 +121,17 @@ public :
     }
 };
 
+class Castle : public Object
+{
+public:
+    Castle()
+    {
+        SrcRect = { 224,256, 32,32 };
+    }
+};
+
+
+
 class Alien : public Object
 {
 public:
@@ -164,7 +175,7 @@ struct Tile : public ClickableArea
     virtual bool CanPlaceHere() const { return true; }
 };
 
-struct Castle : public Tile
+struct CastleTile : public Tile
 {
     bool CanPlaceHere() const override { return false; }
 };
@@ -296,7 +307,7 @@ class Level : public SubSystem, public InputHandler
         20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,
         40 , 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
         144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,205,150,150,150,150,150,
+        144,149,150,150,150,150,150,150,150,150,150,150,150,150,202,150,150,150,150,150,
         144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
         144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
         144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
@@ -305,10 +316,10 @@ class Level : public SubSystem, public InputHandler
 
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,144,
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,168,
-        150,150,205,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,217,
+        150,150,202,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,217,
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,205,150,150,150,150,
+        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,202,150,150,150,150,
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
         150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
@@ -337,14 +348,19 @@ public:
         {
             for (int i = 0; i < MapW; ++i)
             {
-                int bitmapIdx = pMap[j * MapW + i];
+                int mapIdx = j * MapW + i;
+                int bitmapIdx = pMap[mapIdx];
                 Tile* pTile = nullptr;
-                if (bitmapIdx == 205)
-                    pTile = new Castle();
+                if (bitmapIdx == 202)
+                {
+                    pTile = new CastleTile();
+                    createCastle(mapIdx);
+                    std::cout << "create catle - mapIdx : " << mapIdx << std::endl;
+                }
                 else
                     pTile=new Tile();
                 pTile->BitmapIdx = bitmapIdx;
-                pTile->MapIdx = j * MapW + i;
+                pTile->MapIdx = mapIdx;
 
                 int mapTexW = static_cast<int>(mapTex.W);
                 int mapTileTexW = mapTexW / pTile->Width;
@@ -375,6 +391,14 @@ public:
         objects.push_back(alien);
 
     }
+
+    void createCastle(int MapIndex)
+    {
+        Castle* castle = new Castle();
+        castle->Init(RM.GetTex(ResourceManager::ResID_Army), MapIndex);
+        objects.push_back(castle);
+    }
+
 
     void createSpearman(int MapIndex)
     {
