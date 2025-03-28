@@ -75,10 +75,19 @@ public:
     }
 };
 
+enum Faction
+{
+    Faction_None = 0,
+    Faction_Wee = 1,
+    Faction_Chok = 2,
+    Faction_Oh = 3,
+};
+
 class Object
 {
 protected :
     SDL_FRect SrcRect = { 0,0,0,0 };
+    Faction Fac= Faction_None;
 public:
     int dx = 0;
     int dy = 0;
@@ -104,29 +113,48 @@ public:
     {
         Loc += Delta;
     }
-
-    void SetLocation(const Location& NewLoc)
-    {
-        Loc = NewLoc;
-    }
 };
 
+
+class Swordman : public Object
+{
+public :
+    Swordman(Faction a_Fac)
+    {
+        Fac = a_Fac;
+        SrcRect= { 0,192 +32*static_cast<float>(Fac), 32,32 };
+    }
+};
 
 class Spearman : public Object
 {
-public :
-    Spearman()
+public:
+    Spearman(Faction a_Fac)
     {
-        SrcRect= { 32,256, 32,32 };
+        Fac = a_Fac;
+        SrcRect = { 32,192 + 32 * static_cast<float>(Fac), 32,32 };
     }
 };
+class Polearm : public Object
+{
+public:
+    Polearm(Faction a_Fac)
+    {
+        Fac = a_Fac;
+        SrcRect = { 64,192 + 32 * static_cast<float>(Fac), 32,32 };
+    }
+};
+
+
+
 
 class Castle : public Object
 {
 public:
-    Castle()
+    Castle(Faction a_Fac)
     {
-        SrcRect = { 224,256, 32,32 };
+        Fac = a_Fac;
+        SrcRect = { 224,192 + 32 * static_cast<float>(Fac), 32,32 };
     }
 };
 
@@ -137,7 +165,6 @@ class Alien : public Object
 public:
     void Update() override
     {
-        Loc.x += dx;
     }
 };
 
@@ -354,7 +381,8 @@ public:
                 if (bitmapIdx == 202)
                 {
                     pTile = new CastleTile();
-                    createCastle(mapIdx);
+                    static int createdFaction = Faction_Wee;
+                    createCastle(mapIdx, static_cast<Faction>(createdFaction++));
                     std::cout << "create catle - mapIdx : " << mapIdx << std::endl;
                 }
                 else
@@ -392,17 +420,17 @@ public:
 
     }
 
-    void createCastle(int MapIndex)
+    void createCastle(int MapIndex, Faction a_Fac)
     {
-        Castle* castle = new Castle();
+        Castle* castle = new Castle(a_Fac);
         castle->Init(RM.GetTex(ResourceManager::ResID_Army), MapIndex);
         objects.push_back(castle);
     }
 
 
-    void createSpearman(int MapIndex)
+    void createSpearman(int MapIndex, Faction Fac)
     {
-        Spearman* spearman = new Spearman();
+        Spearman* spearman = new Spearman(Fac);
         spearman->Init(RM.GetTex(ResourceManager::ResID_Army), MapIndex);
         objects.push_back(spearman);
     }
@@ -503,7 +531,7 @@ public:
                             }
                         }
                         if(!exist && i->CanPlaceHere())
-                            createSpearman(i->MapIdx);
+                            createSpearman(i->MapIdx, Faction_Chok);
                     }
                 }
 
