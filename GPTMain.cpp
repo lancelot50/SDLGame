@@ -16,17 +16,6 @@ struct DebugManager
 DebugManager DM;
 
 
-int checkCollision(const SDL_FRect& rect1, const SDL_FRect& rect2)
-{
-    if (rect1.x + rect1.w >= rect2.x &&
-        rect2.x + rect2.w >= rect1.x &&
-        rect1.y + rect1.h >= rect2.y &&
-        rect2.y + rect2.h >= rect1.y) {
-        return 1;
-    }
-    return 0;
-}
-
 class Viewport
 {
 public :
@@ -86,6 +75,7 @@ enum Faction
 class Object
 {
 protected :
+	std::string Name;
     SDL_FRect SrcRect = { 0,0,0,0 };
     Faction Fac= Faction_None;
 public:
@@ -150,6 +140,25 @@ public:
 
 class Castle : public Object
 {
+    int Gold=0;
+    int Food=0;
+    int Order = 90;
+
+	int Duration = 2700;
+
+    int Soldier = 14000;
+    int SoldierMorale = 90;
+
+    int Spears = 0;
+	int Polearms = 0;
+    int Bows = 0;
+    int Horses = 0;
+
+	int GoldPerMonth = 500;
+	int FoodPerSeason = 8000;
+
+	int NumOfPerson = 0;
+
 public:
     Castle(Faction a_Fac)
     {
@@ -168,13 +177,6 @@ public:
     }
 };
 
-class Missile : public Object
-{
-public:
-    void Update() override
-    {
-    }
-};
 
 struct ClickableArea
 {
@@ -216,7 +218,7 @@ protected:
 public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
     virtual void RenderText(const std::string& message, float x, float y) = 0;
-    virtual void RenderObject(Object* obj, Tile* pTile) = 0;
+    virtual void RenderObject(Object* obj, Tile* pTile, bool bSelected) = 0;
     virtual void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) = 0;
     virtual void RenderUI(Window* pWnd) = 0;
     virtual void RenderTexture(Texture* pTex, SDL_FRect* pDestRect) = 0;
@@ -284,9 +286,8 @@ public:
     {
         ResID_SpaceShip = 0,
         ResID_Alien = 1,
-        ResID_Missile = 2,
-        ResID_Tile=3,
-        ResID_Army=4,
+        ResID_Tile=2,
+        ResID_Army=3,
     };
     void LoadResources(RenderInterface* RI)
     {
@@ -295,8 +296,6 @@ public:
         Data.push_back(SpaceShip);
         Texture* Alien = new Texture(renderer, "alien.bmp", 60, 60);
         Data.push_back(Alien);
-        Texture* Missile = new Texture(renderer, "missile.bmp", 20, 50);
-        Data.push_back(Missile);
 
         Texture* Tile = new Texture(renderer, "buch-outdoor.bmp", 384, 192);
 //      Texture* Tile = new Texture(renderer, "buch-outdoor2x.bmp", 384*2, 192*2);
@@ -355,6 +354,7 @@ class Level : public SubSystem, public InputHandler
 
     std::vector<Tile*> vTileMap;
 
+    int SelectedIndex = -1;
 public:
     int Width = 0;
     int Height = 0;
@@ -435,8 +435,6 @@ public:
         objects.push_back(spearman);
     }
 
-
-
     void Destroy()
     {
         for (Object* obj : objects)
@@ -463,32 +461,7 @@ public:
     {
         return true;
     }
-
-    void updateCollision()
-    {
-        for (Object* obj : objects)
-        {
-            Missile* missile = dynamic_cast<Missile*>(obj);
-            if (missile && missile->show)
-            {
-                for (Object* target : objects)
-                {
-                    Alien* alien = dynamic_cast<Alien*>(target);
-                    if (alien && alien->show)
-                    {
-                        SDL_FRect missileRect = { missile->Loc.x, missile->Loc.y, missile->pTex->W, missile->pTex->H };
-                        SDL_FRect alienRect = { alien->Loc.x, alien->Loc.y, alien->pTex->W, alien->pTex->H };
-                        if (checkCollision(missileRect, alienRect))
-                        {
-                            missile->show = false;
-                            alien->show = false;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+    
     bool HandleInput(const SDL_Event& event)
     {
         bool isHandled = false;
@@ -498,8 +471,8 @@ public:
                 isHandled=PlayerMoveRight();
             if (event.key.key == SDLK_LEFT || event.key.key == SDLK_KP_4)
                 isHandled = PlayerMoveLeft();
-            if (event.key.key == SDLK_SPACE)
-                isHandled = CreateMissile(RM.GetTex(ResourceManager::ResID_Missile));
+//            if (event.key.key == SDLK_SPACE)
+//                isHandled = CreateMissile(RM.GetTex(ResourceManager::ResID_Missile));
             if (event.key.key == SDLK_F9)
             {
                 DM.bShowObjectRect = !DM.bShowObjectRect;
@@ -519,6 +492,7 @@ public:
                     if (i->IsIn(x, y))
                     {
                         std::cout << "click map Index : " << i->MapIdx << std::endl;
+                        SelectedIndex = i->MapIdx;
 
                         bool exist = false;
                         for (auto& obj : objects)
@@ -530,8 +504,8 @@ public:
                                 break;
                             }
                         }
-                        if(!exist && i->CanPlaceHere())
-                            createSpearman(i->MapIdx, Faction_Chok);
+//                        if(!exist && i->CanPlaceHere())
+//                            createSpearman(i->MapIdx, Faction_Chok);
                     }
                 }
 
@@ -545,8 +519,6 @@ public:
     {
         for (Object* obj : objects)
             obj->Update();
-
-        updateCollision();
 
         // show 플래그가 false인 객체들 삭제
         objects.erase(std::remove_if(objects.begin(), objects.end(), [](Object* obj) {
@@ -573,7 +545,7 @@ public:
         }
 
         for (Object* obj : objects)
-            RI->RenderObject(obj, vTileMap[obj->MapIndex]);
+            RI->RenderObject(obj, vTileMap[obj->MapIndex], SelectedIndex==obj->MapIndex);
     }
 };
 
@@ -627,10 +599,15 @@ public :
         }
     }
 
-    void RenderObject(Object* Obj, Tile*pTile) override
+    void RenderObject(Object* Obj, Tile*pTile, bool bSelectedIndex) override
     {
         SDL_FRect srcRect= Obj->GetSrcRect();
         SDL_RenderTexture(renderer, Obj->pTex->Tex, &srcRect, &pTile->TexDestRect);
+        if (bSelectedIndex)
+        {
+            SDL_SetRenderDrawColor(renderer, 255, 0, 0, 0);
+            SDL_RenderRect(renderer, &pTile->TexDestRect);
+        }
         if (DM.bShowObjectRect)
         {
             SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
@@ -699,13 +676,16 @@ public :
 class GameStatePlaying : public GameState
 {
     Level Stage;
+
+    std::vector<Window*> vpWindowArray;
 public :
     GameStatePlaying(StateManager* pSM) : GameState(pSM) {}
     void Init(const Viewport& VP)
     {
         Stage.Init(VP);
-//        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
-//        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
+        //        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
+        //        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
+        vpWindowArray.push_back(new Window("Castle Status", {static_cast<float>(VP.WIDTH-300), 100.f, 230.f, 300.f }));
     }
 
     void Destroy()
@@ -722,6 +702,8 @@ public :
     void Render(RenderInterface* RI)
     {
         Stage.Render(RI);
+		for (auto& wnd : vpWindowArray)
+			wnd->Render(RI);
     }
     bool HandleInput(const SDL_Event& event)
     {
