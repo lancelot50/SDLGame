@@ -8,7 +8,6 @@
 #pragma comment(lib, "SDL3.lib")
 #pragma comment(lib, "SDL3_ttf.lib")
 
-
 struct DebugManager
 {
     bool bShowObjectRect = false;
@@ -165,6 +164,14 @@ public:
         Fac = a_Fac;
         SrcRect = { 224,192 + 32 * static_cast<float>(Fac), 32,32 };
     }
+    void InitData(std::string a_Name, int a_Gold, int a_Food)
+	{
+		Name = a_Name;
+		Gold = a_Gold;
+		Food = a_Food;
+	}
+
+
 };
 
 
@@ -263,7 +270,8 @@ public :
         TexDestRect = a_Size;
         TitleLoc = { a_Size.x + a_Size.w/2, a_Size.y + 20 };
     }
-
+	virtual ~Window() {}
+	virtual void Init(std::string a_CastleName, int a_Gold, int a_Food) {}
     void Update() override {}
     void Render(RenderInterface* RI) override
     {
@@ -275,6 +283,30 @@ public :
         if(Title.length()>0)
             RI->RenderText(Title, TitleLoc.x, TitleLoc.y);
     }
+};
+
+class CastleStatusWnd : public Window
+{
+    std::string Name;
+    std::string Gold;
+	std::string Food;
+public:
+	CastleStatusWnd(const std::string& a_Title, const SDL_FRect& a_Size) : Window(a_Title, a_Size){}
+    void Init(std::string a_CastleName, int a_Gold, int a_Food)
+    {
+		Name = a_CastleName;
+		Gold = u8"금 : "+std::to_string(a_Gold);
+		Food = u8"병량 : "+std::to_string(a_Food);
+    }
+	void Render(RenderInterface* RI) override
+	{
+		Window::Render(RI);
+        float x = TexDestRect.x + 30;
+		float y = TexDestRect.y + 50;
+        RI->RenderText(Name, x, y);
+        RI->RenderText(Gold, x, y+20);
+        RI->RenderText(Food, x, y+40);
+	}
 };
 
 
@@ -424,9 +456,21 @@ public:
     {
         Castle* castle = new Castle(a_Fac);
         castle->Init(RM.GetTex(ResourceManager::ResID_Army), MapIndex);
+
+        switch(MapIndex)
+		{
+		case 94:
+			castle->InitData(u8"낙양", 2200, 22000);
+			break;
+		case 242:
+			castle->InitData(u8"성도", 4400, 47400);
+			break;
+		case 315:
+			castle->InitData(u8"건업", 5000, 454000);
+			break;
+		}
         objects.push_back(castle);
     }
-
 
     void createSpearman(int MapIndex, Faction Fac)
     {
@@ -457,11 +501,6 @@ public:
         return true;
     }
 
-    bool CreateMissile(Texture& Tex)
-    {
-        return true;
-    }
-    
     bool HandleInput(const SDL_Event& event)
     {
         bool isHandled = false;
@@ -569,7 +608,8 @@ public :
         _VP = VP;
 
         TTF_Init();
-        font = TTF_OpenFont("arial.ttf", 12); // 폰트 파일은 실제 위치에 맞춰 지정해야 함
+//      font = TTF_OpenFont("arial.ttf", 12); // 폰트 파일은 실제 위치에 맞춰 지정해야 함        - 한글 안나와서 버림
+        font = TTF_OpenFont("NotoSansKR-Medium.ttf", 12); // 폰트 파일은 실제 위치에 맞춰 지정해야 함
 
         return this;
     }
@@ -685,7 +725,9 @@ public :
         Stage.Init(VP);
         //        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
         //        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
-        vpWindowArray.push_back(new Window("Castle Status", {static_cast<float>(VP.WIDTH-300), 100.f, 230.f, 300.f }));
+		Window* pCastleStatusWnd = new CastleStatusWnd("Castle Status", { static_cast<float>(VP.WIDTH - 300), 100.f, 230.f, 300.f });
+		pCastleStatusWnd->Init(u8"낙양", 1000, 2000);
+        vpWindowArray.push_back(pCastleStatusWnd);
     }
 
     void Destroy()
@@ -723,9 +765,7 @@ class GameStateMenu : public GameState
 {
     std::vector<Window*> vpWindowArray;
 public :
-    GameStateMenu(StateManager* pSM) : GameState(pSM)
-    {
-    }
+    GameStateMenu(StateManager* pSM) : GameState(pSM) { }
     void Init(const Viewport& VP) override
     {
         const float menuWndW = 500;
