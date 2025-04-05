@@ -74,10 +74,11 @@ enum Faction
 class Object
 {
 protected :
-	std::string Name;
+
     SDL_FRect SrcRect = { 0,0,0,0 };
     Faction Fac= Faction_None;
 public:
+    std::string Name;
     int dx = 0;
     int dy = 0;
     bool show = true;
@@ -139,8 +140,10 @@ public:
 
 class Castle : public Object
 {
-    int Gold=0;
-    int Food=0;
+public:
+    int Gold = 0;
+    int Food = 0;
+private:
     int Order = 90;
 
 	int Duration = 2700;
@@ -170,8 +173,6 @@ public:
 		Gold = a_Gold;
 		Food = a_Food;
 	}
-
-
 };
 
 
@@ -264,6 +265,8 @@ public :
     std::string Title;
     Location TitleLoc;
 
+	bool bShow = true;
+
     Window(const std::string& a_Title, const SDL_FRect& a_Size)
     {
         Title = a_Title;
@@ -283,25 +286,46 @@ public :
         if(Title.length()>0)
             RI->RenderText(Title, TitleLoc.x, TitleLoc.y);
     }
+
+	void SetTexture(Texture* pTex)
+	{
+		this->pTex = pTex;
+	}
+
+    void SetPosition(float X, float Y)
+    {
+        TexDestRect.x = X;
+        TexDestRect.y = Y;
+        TitleLoc = { TexDestRect.x + TexDestRect.w / 2, TexDestRect.y + 20 };
+    }
+
 };
 
-class CastleStatusWnd : public Window
+class CastleInfoWnd : public Window
 {
     std::string Name;
     std::string Gold;
 	std::string Food;
 public:
-	CastleStatusWnd(const std::string& a_Title, const SDL_FRect& a_Size) : Window(a_Title, a_Size){}
+	CastleInfoWnd(const std::string& a_Title, const SDL_FRect& a_Size) : Window(a_Title, a_Size){}
     void Init(std::string a_CastleName, int a_Gold, int a_Food)
     {
 		Name = a_CastleName;
 		Gold = u8"±Ý : "+std::to_string(a_Gold);
 		Food = u8"º´·® : "+std::to_string(a_Food);
     }
+
+    void Init(Castle* pCastle)
+    {
+		Name = pCastle->Name;
+		Gold = u8"±Ý : " + std::to_string(pCastle->Gold);
+		Food = u8"º´·® : " + std::to_string(pCastle->Food);
+    }
+
 	void Render(RenderInterface* RI) override
 	{
 		Window::Render(RI);
-        float x = TexDestRect.x + 30;
+        float x = TexDestRect.x + 50;
 		float y = TexDestRect.y + 50;
         RI->RenderText(Name, x, y);
         RI->RenderText(Gold, x, y+20);
@@ -320,6 +344,7 @@ public:
         ResID_Alien = 1,
         ResID_Tile=2,
         ResID_Army=3,
+		ResID_CastleMenu = 4,
     };
     void LoadResources(RenderInterface* RI)
     {
@@ -335,6 +360,9 @@ public:
 
         Texture* Army = new Texture(renderer, "Army.bmp", 448, 448);
         Data.push_back(Army);
+
+        Texture* CastleMenu = new Texture(renderer, "CastleMenu.bmp", 88, 214);
+        Data.push_back(CastleMenu);
     }
     ~ResourceManager()
     {
@@ -386,10 +414,12 @@ class Level : public SubSystem, public InputHandler
 
     std::vector<Tile*> vTileMap;
 
-    int SelectedIndex = -1;
+
 public:
     int Width = 0;
     int Height = 0;
+
+    int SelectedIndex = -1;
 
     void Init(const Viewport& VP)
     {
@@ -479,6 +509,21 @@ public:
         objects.push_back(spearman);
     }
 
+	bool SetCastleInfoWnd(Window* pWnd)
+	{
+		CastleInfoWnd* pCastleInfoWnd = static_cast<CastleInfoWnd*>(pWnd);
+		for (Object* obj : objects)
+		{
+			if (obj->MapIndex == SelectedIndex)
+			{
+				Castle* pCastle = static_cast<Castle*>(obj);
+				pCastleInfoWnd->Init(pCastle);
+                return true;
+			}
+		}
+        return false;
+	}
+
     void Destroy()
     {
         for (Object* obj : objects)
@@ -532,17 +577,7 @@ public:
                     {
                         std::cout << "click map Index : " << i->MapIdx << std::endl;
                         SelectedIndex = i->MapIdx;
-
-                        bool exist = false;
-                        for (auto& obj : objects)
-                        {
-                            if (obj->MapIndex == i->MapIdx)
-                            {
-                                std::cout << "Exist spearman!" << std::endl;
-                                exist = true;
-                                break;
-                            }
-                        }
+                        isHandled = true;
 //                        if(!exist && i->CanPlaceHere())
 //                            createSpearman(i->MapIdx, Faction_Chok);
                     }
@@ -718,6 +753,8 @@ class GameStatePlaying : public GameState
     Level Stage;
 
     std::vector<Window*> vpWindowArray;
+    Window* pCastleInfoWnd=nullptr;
+	Window* pCastleMenuWnd = nullptr;
 public :
     GameStatePlaying(StateManager* pSM) : GameState(pSM) {}
     void Init(const Viewport& VP)
@@ -725,9 +762,14 @@ public :
         Stage.Init(VP);
         //        Stage.CreateSpaceShip(RM.GetTex(ResourceManager::ResID_SpaceShip));
         //        Stage.CreateAliens(RM.GetTex(ResourceManager::ResID_Alien));
-		Window* pCastleStatusWnd = new CastleStatusWnd("Castle Status", { static_cast<float>(VP.WIDTH - 300), 100.f, 230.f, 300.f });
-		pCastleStatusWnd->Init(u8"³«¾ç", 1000, 2000);
-        vpWindowArray.push_back(pCastleStatusWnd);
+		pCastleInfoWnd = new CastleInfoWnd("Castle Info", { static_cast<float>(VP.WIDTH - 300), 100.f, 230.f, 300.f });
+		pCastleInfoWnd->Init(u8"³«¾ç", 1000, 2000);
+        vpWindowArray.push_back(pCastleInfoWnd);
+
+		pCastleMenuWnd = new Window("", { static_cast<float>(VP.WIDTH - 300), 400.f, 88.f, 214.f });
+		pCastleMenuWnd->SetTexture(&RM.GetTex(ResourceManager::ResID_CastleMenu));
+        pCastleMenuWnd->bShow = false;
+		vpWindowArray.push_back(pCastleMenuWnd);
     }
 
     void Destroy()
@@ -745,11 +787,29 @@ public :
     {
         Stage.Render(RI);
 		for (auto& wnd : vpWindowArray)
-			wnd->Render(RI);
+			if(wnd->bShow)
+                wnd->Render(RI);
     }
     bool HandleInput(const SDL_Event& event)
     {
         bool isHandled=Stage.HandleInput(event);
+		if (isHandled && Stage.SelectedIndex != -1)
+		{
+            bool bSet=Stage.SetCastleInfoWnd(pCastleInfoWnd);
+            if (bSet)
+            {
+                if (event.button.button == SDL_BUTTON_LEFT)
+                {
+                    float x = event.button.x;
+                    float y = event.button.y;
+                    pCastleMenuWnd->SetPosition(x, y);
+                    pCastleMenuWnd->bShow = true;
+                }
+            }
+            else
+                pCastleMenuWnd->bShow = false;
+		}
+        
         if (event.type == SDL_EVENT_KEY_DOWN)
         {
             if (event.key.key == SDLK_F10)
