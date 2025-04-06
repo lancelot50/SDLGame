@@ -254,6 +254,7 @@ public:
     virtual void Render(RenderInterface* RI) = 0;
 };
 
+class GameState;
 
 class Window : public SubSystem, public ClickableArea
 {
@@ -274,6 +275,7 @@ public :
     }
 	virtual ~Window() {}
 	virtual void Init(std::string a_CastleName, int a_Gold, int a_Food) {}
+    virtual void Execute(GameState* pState) {}
     void Update() override {}
     void Render(RenderInterface* RI) override
     {
@@ -819,6 +821,17 @@ public :
     }
 };
 
+
+class ReturnToGameWnd : public Window
+{
+public:
+    ReturnToGameWnd(const std::string& a_Title, const SDL_FRect& a_Size) : Window(a_Title, a_Size) {}
+    void Execute(GameState* pState) override
+    {
+        pState->GotoPlayingState();
+    }
+};
+
 class GameStateMenu : public GameState
 {
     std::vector<Window*> vpWindowArray;
@@ -837,7 +850,7 @@ public :
         const float btnWndW = 140;
         const float btnWndH = 26;
         Location btnLoc = { pMenuWnd->TexDestRect.x + 6, pMenuWnd->TexDestRect.y + 144 };
-        Window* pReturnToGameWnd = new Window("", { btnLoc.x, btnLoc.y, btnWndW, btnWndH });
+        Window* pReturnToGameWnd = new ReturnToGameWnd("", { btnLoc.x, btnLoc.y, btnWndW, btnWndH });
         vpWindowArray.push_back(pReturnToGameWnd);
     }
 
@@ -880,17 +893,12 @@ public :
                 {
                     if ((*it)->IsIn(x, y))
                     {
-                        if ((*it)->Title == "Press ESC goes back to Play")
-                        {
-                            GotoPlayingState();
-                            break;
-                        }
+                        (*it)->Execute(this);
+                        break;
                     }
                 }
             }
         }
-
-
 
         return isHandled;
     }
