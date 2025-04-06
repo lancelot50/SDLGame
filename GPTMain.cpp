@@ -228,7 +228,6 @@ public:
     virtual void RenderText(const std::string& message, float x, float y) = 0;
     virtual void RenderObject(Object* obj, Tile* pTile, bool bSelected) = 0;
     virtual void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) = 0;
-    virtual void RenderUI(Window* pWnd) = 0;
     virtual void RenderTexture(Texture* pTex, SDL_FRect* pDestRect) = 0;
     virtual void RenderBox(SDL_FRect* pFRect, Uint8 R, Uint8 G, Uint8 B, Uint8 A ) = 0;
 
@@ -278,7 +277,6 @@ public :
     void Update() override {}
     void Render(RenderInterface* RI) override
     {
-        RI->RenderUI(this);
         if (pTex)
             RI->RenderTexture(pTex, &TexDestRect);
         else
@@ -344,7 +342,8 @@ public:
         ResID_Alien = 1,
         ResID_Tile=2,
         ResID_Army=3,
-		ResID_CastleMenu = 4,
+		ResID_GameMenu = 4,
+		ResID_CastleMenu = 5,
     };
     void LoadResources(RenderInterface* RI)
     {
@@ -360,6 +359,9 @@ public:
 
         Texture* Army = new Texture(renderer, "Army.bmp", 448, 448);
         Data.push_back(Army);
+
+        Texture* GameMenu = new Texture(renderer, "GameMenu.bmp", 150, 208);
+        Data.push_back(GameMenu);
 
         Texture* CastleMenu = new Texture(renderer, "CastleMenu.bmp", 88, 214);
         Data.push_back(CastleMenu);
@@ -702,10 +704,6 @@ public :
         }
     }
 
-    void RenderUI(Window* pWnd) override
-    {
-    }
-
     void RenderTexture(Texture* pTex, SDL_FRect* pDestRect) override
     {
         SDL_FRect srcRect = { 0,0, static_cast<float>(pTex->W), static_cast<float>(pTex->H)};
@@ -828,18 +826,18 @@ public :
     GameStateMenu(StateManager* pSM) : GameState(pSM) { }
     void Init(const Viewport& VP) override
     {
-        const float menuWndW = 500;
-        const float menuWndH = 500;
+        const float menuWndW = 150;
+        const float menuWndH = 208;
         Location start = { VP.WIDTH / 2 - menuWndW / 2, 100 };
 
-        Window* pMenuWnd = new Window("Menu", { start.x, start.y, menuWndW, menuWndH });
-        size_t len = pMenuWnd->Title.length();
+        Window* pMenuWnd = new Window("", { start.x, start.y, menuWndW, menuWndH });
+		pMenuWnd->SetTexture(&RM.GetTex(ResourceManager::ResID_GameMenu));
         vpWindowArray.push_back(pMenuWnd);
 
-        const float btnWndW = 200;
-        const float btnWndH = 50;
-        Location btnLoc = { pMenuWnd->TexDestRect.x + pMenuWnd->TexDestRect.w / 2 - btnWndW / 2, pMenuWnd->TexDestRect.y + 300 };
-        Window* pReturnToGameWnd = new Window("Press ESC goes back to Play", { btnLoc.x, btnLoc.y, btnWndW, btnWndH });
+        const float btnWndW = 140;
+        const float btnWndH = 26;
+        Location btnLoc = { pMenuWnd->TexDestRect.x + 6, pMenuWnd->TexDestRect.y + 144 };
+        Window* pReturnToGameWnd = new Window("", { btnLoc.x, btnLoc.y, btnWndW, btnWndH });
         vpWindowArray.push_back(pReturnToGameWnd);
     }
 
@@ -877,7 +875,7 @@ public :
             {
                 float x = event.button.x;
                 float y = event.button.y;
-
+				std::cout << "x:" << x << ", y:" << y << std::endl;
                 for (auto it=vpWindowArray.rbegin(); it!=vpWindowArray.rend(); ++it )
                 {
                     if ((*it)->IsIn(x, y))
