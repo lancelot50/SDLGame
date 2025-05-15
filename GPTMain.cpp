@@ -888,7 +888,6 @@ public :
             {
                 float x = event.button.x;
                 float y = event.button.y;
-				std::cout << "x:" << x << ", y:" << y << std::endl;
                 for (auto it=vpWindowArray.rbegin(); it!=vpWindowArray.rend(); ++it )
                 {
                     if ((*it)->IsIn(x, y))
