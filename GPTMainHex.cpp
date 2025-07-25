@@ -35,7 +35,7 @@ DebugManager DM;
 class Viewport
 {
 public:
-    const int WIDTH = 1280;
+    const int WIDTH = 1920;
     const int HEIGHT = 960;
 };
 
@@ -256,13 +256,15 @@ struct CastleTile : public Tile
     bool CanPlaceHere() const override { return false; }
 };
 
+enum class HAlign { Left, Center, Right };
+
 class RenderInterface
 {
 protected:
     Viewport* _VP;
 public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
-    virtual void RenderText(const std::string& message, float x, float y) = 0;
+    virtual void RenderText(const std::string& message, float x, float y, float availableWidth, HAlign align = HAlign::Left) = 0;
     virtual void RenderObject(Object* obj, Tile* pTile, bool bSelected) = 0;
     virtual void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) = 0;
     virtual void RenderTexture(Texture* pTex, SDL_FRect* pDestRect) = 0;
@@ -316,7 +318,8 @@ public:
             a_RI->RenderBox(&Rect, 100, 100, 100, 200);
         }
         if (!Title.empty()) {
-            a_RI->RenderText(Title, Rect.x + 5, Rect.y + 5);
+            float centerX = Rect.x + Rect.w / 2.0f;
+            a_RI->RenderText(Title, Rect.x, Rect.y + 5, Rect.w, HAlign::Center);
         }
     }
 
@@ -349,16 +352,18 @@ public:
         if (pCastle) {
             float currentY = Rect.y + 10; // Start with top padding
             const float lineSpacing = 20; // Adjust as needed
+            const float centerX = Rect.x + Rect.w / 2.0f;
+            const float leftX = Rect.x + 10; // Left padding
 
             std::string name = pCastle->Name;
             std::string gold = u8"골드: " + std::to_string(pCastle->Gold);
             std::string food = u8"식량: " + std::to_string(pCastle->Food);
 
-            a_RI->RenderText(name, Rect.x + 10, currentY);
+            a_RI->RenderText(name, leftX, currentY, 0.0f, HAlign::Left);
             currentY += lineSpacing;
-            a_RI->RenderText(gold, Rect.x + 10, currentY);
+            a_RI->RenderText(gold, leftX, currentY, 0.0f, HAlign::Left);
             currentY += lineSpacing;
-            a_RI->RenderText(food, Rect.x + 10, currentY);
+            a_RI->RenderText(food, leftX, currentY, 0.0f, HAlign::Left);
         }
     }
 };
@@ -468,13 +473,21 @@ public:
         SDL_Quit();
     }
 
-    void RenderText(const std::string& message, float x, float y) override
+    void RenderText(const std::string& message, float x, float y, float availableWidth, HAlign align = HAlign::Left) override
     {
         SDL_FRect textRect;
         SDL_Texture* textTexture = CreateTextTexture(message, &textRect, x, y);
         if (!textTexture) {
             return;
         }
+
+        float renderX = x;
+        if (align == HAlign::Center) {
+            renderX = x + (availableWidth - textRect.w) / 2.0f;
+        } else if (align == HAlign::Right) {
+            renderX = x + availableWidth - textRect.w;
+        }
+        textRect.x = renderX;
 
         SDL_RenderTexture(renderer, textTexture, nullptr, &textRect); // Changed NULL to nullptr
         SDL_DestroyTexture(textTexture);
@@ -533,7 +546,7 @@ public:
             SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
             SDL_RenderRect(renderer, &pTile->TexDestRect);
             std::string str = std::to_string(X) + "," + std::to_string(Y) + " " + std::to_string(pTile->BitmapIdx);
-            RenderText(str, pTile->TexDestRect.x + pTile->TexDestRect.w / 2.0f, pTile->TexDestRect.y + pTile->TexDestRect.h / 2.0f);
+            RenderText(str, pTile->TexDestRect.x + pTile->TexDestRect.w / 2.0f, pTile->TexDestRect.y + pTile->TexDestRect.h / 2.0f, 0.0f, HAlign::Center);
         }
     }
 
@@ -1217,6 +1230,35 @@ private:
         RI->PreRender();
 
         StateMgr.Render(RI);
+
+        // Render buch-outdoor.bmp at bottom right with scaling
+        Texture& tileTex = RM.GetTex(ResourceManager::ResID_Tile);
+        float scale = HEX_FLAT_TOP_WIDTH / Tile::SourceBitmapTileSize;
+        float scaledW = tileTex.W * scale;
+        float scaledH = tileTex.H * scale;
+        SDL_FRect destRect = { static_cast<float>(VP.WIDTH - scaledW), static_cast<float>(VP.HEIGHT - scaledH), scaledW, scaledH };
+        RI->RenderTexture(&tileTex, &destRect);
+
+        if (DM.bShowObjectRect) {
+            int tileCols = static_cast<int>(tileTex.W / Tile::SourceBitmapTileSize);
+            int tileRows = static_cast<int>(tileTex.H / Tile::SourceBitmapTileSize);
+            float scaledTileSize = Tile::SourceBitmapTileSize * scale;
+
+            for (int j = 0; j < tileRows; ++j) {
+                for (int i = 0; i < tileCols; ++i) {
+                    SDL_FRect tileRect = {
+                        destRect.x + i * scaledTileSize,
+                        destRect.y + j * scaledTileSize,
+                        scaledTileSize,
+                        scaledTileSize
+                    };
+                    RI->RenderBox(&tileRect, 255, 255, 0, 255); // Yellow box
+
+                    std::string indexStr = std::to_string(j * tileCols + i);
+                    RI->RenderText(indexStr, tileRect.x + tileRect.w / 2.0f, tileRect.y + tileRect.h / 2.0f, 0.0f, HAlign::Center);
+                }
+            }
+        }
 
         Fps->Render(RI);
 
