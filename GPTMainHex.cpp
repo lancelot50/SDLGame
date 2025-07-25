@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <string>
 #include <cmath>
+#include <fstream> // For file operations
+#include <sstream> // For string stream operations
 
 #pragma comment(lib, "SDL3.lib")
 #pragma comment(lib, "SDL3_ttf.lib")
@@ -345,12 +347,18 @@ public:
         Window::Render(a_RI); // Render window background
 
         if (pCastle) {
+            float currentY = Rect.y + 10; // Start with top padding
+            const float lineSpacing = 20; // Adjust as needed
+
             std::string name = pCastle->Name;
-            std::string gold = "Gold: " + std::to_string(pCastle->Gold);
-            std::string food = "Food: " + std::to_string(pCastle->Food);
-            a_RI->RenderText(name, Rect.x + 10, Rect.y + 10);
-            a_RI->RenderText(gold, Rect.x + 10, Rect.y + 30);
-            a_RI->RenderText(food, Rect.x + 10, Rect.y + 50);
+            std::string gold = u8"골드: " + std::to_string(pCastle->Gold);
+            std::string food = u8"식량: " + std::to_string(pCastle->Food);
+
+            a_RI->RenderText(name, Rect.x + 10, currentY);
+            currentY += lineSpacing;
+            a_RI->RenderText(gold, Rect.x + 10, currentY);
+            currentY += lineSpacing;
+            a_RI->RenderText(food, Rect.x + 10, currentY);
         }
     }
 };
@@ -573,8 +581,7 @@ public:
             return nullptr;
         }
 
-        *outRect = { x - textSurface->w / 2.0f, y - textSurface->h / 2.0f,
-                               static_cast<float>(textSurface->w), static_cast<float>(textSurface->h) };
+        *outRect = { x, y, static_cast<float>(textSurface->w), static_cast<float>(textSurface->h) };
 
         SDL_DestroySurface(textSurface);
         return textTexture;
@@ -601,30 +608,7 @@ class Level : public SubSystem, public InputHandler
 
     static const int MapW = 20;
     static const int MapH = 20;
-    int pMap[MapW * MapH] =
-    {
-        0,  1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,
-        20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,
-        40 , 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,202,150,150,150,150,150, // Castle at (4,14)
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        144,149,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,144,
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,168,
-        150,202,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,217, // Castle at (12,1)
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,202,150,150,150,150, // Castle at (15,15)
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-        150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,150,
-    };
+    std::vector<int> pMap; // Changed to dynamic array
 
     std::vector<Tile*> vTileMap;
 
@@ -644,6 +628,24 @@ public:
 
     void initMap()
     {
+        pMap.clear(); // Clear existing map data
+        std::ifstream mapFile("map.txt");
+        if (!mapFile.is_open()) {
+            std::cerr << "Failed to open map.txt" << std::endl;
+            // Handle error, maybe load a default map or exit
+            return;
+        }
+
+        std::string line;
+        while (std::getline(mapFile, line)) {
+            std::stringstream ss(line);
+            std::string segment;
+            while (std::getline(ss, segment, ',')) {
+                pMap.push_back(std::stoi(segment));
+            }
+        }
+        mapFile.close();
+
         Texture& mapTex = RM.GetTex(ResourceManager::ResID_Tile);
 
         for (int j = 0; j < MapH; ++j)
