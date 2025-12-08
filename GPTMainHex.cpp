@@ -61,19 +61,18 @@ class Texture
 {
 public:
     SDL_Texture* Tex = nullptr;
-    float  W = 0;
+    float W = 0;
     float H = 0;
-    Texture(SDL_Renderer* renderer, std::string Name, float Width, float Height)
+    Texture(SDL_Renderer* renderer, const std::string& Name, float Width, float Height)
     {
         SDL_Surface* bmp = SDL_LoadBMP(Name.c_str());
-        if (!bmp) {
+        if (!bmp)
             std::cerr << "Failed to load BMP: " << Name << " - " << SDL_GetError() << std::endl;
-            // Handle error, maybe load a placeholder or exit
-        }
+
         Tex = SDL_CreateTextureFromSurface(renderer, bmp);
-        if (!Tex) {
+        if (!Tex)
             std::cerr << "Failed to create texture from surface: " << Name << " - " << SDL_GetError() << std::endl;
-        }
+
         SDL_DestroySurface(bmp);
 
         W = Width;
@@ -81,9 +80,8 @@ public:
     }
     ~Texture()
     {
-        if (Tex) {
+        if (Tex)
             SDL_DestroyTexture(Tex);
-        }
     }
 };
 
@@ -195,14 +193,6 @@ public:
     }
 };
 
-class Alien : public Object
-{
-public:
-    void Update() override
-    {
-    }
-};
-
 struct ClickableArea
 {
     SDL_FRect  TexDestRect = { 0,0,0,0 };
@@ -281,7 +271,8 @@ public:
 };
 
 // --- Windowing System ---
-class Window : public ClickableArea {
+class Window : public ClickableArea
+{
 public:
     std::string Title;
     SDL_FRect Rect;
@@ -289,31 +280,37 @@ public:
     bool bShow = true;
     Texture* pTex = nullptr;
 
-    Window(const std::string& a_Title, const SDL_FRect& a_Rect, RenderInterface* a_RI)
-        : Title(a_Title), Rect(a_Rect), RI(a_RI) {
+    Window(const std::string& a_Title, const SDL_FRect& a_Rect, RenderInterface* a_RI) : Title(a_Title), Rect(a_Rect), RI(a_RI)
+    {
         TexDestRect = Rect;
     }
 
     virtual ~Window() {}
 
-    void SetTexture(Texture* a_pTex) {
+    void SetTexture(Texture* a_pTex)
+    {
         pTex = a_pTex;
     }
 
-    void SetPosition(float x, float y) {
+    void SetPosition(float x, float y)
+    {
         Rect.x = x;
         Rect.y = y;
         TexDestRect.x = x;
         TexDestRect.y = y;
     }
 
-    virtual void Render(RenderInterface* a_RI) {
-        if (!bShow) return;
+    virtual void Render(RenderInterface* a_RI)
+    {
+        if (!bShow)
+            return;
 
-        if (pTex) {
+        if (pTex)
+        {
             a_RI->RenderTexture(pTex, &Rect);
         }
-        else {
+        else
+        {
             // Draw a default window box
             a_RI->RenderBox(&Rect, 100, 100, 100, 200);
         }
@@ -323,29 +320,36 @@ public:
         }
     }
 
-    virtual void Execute(GameState* pState) {
+    virtual void Execute(GameState* pState)
+    {
         // Default implementation does nothing
     }
 };
 
-class CastleInfoWnd : public Window {
+class CastleInfoWnd : public Window
+{
 public:
     Castle* pCastle = nullptr;
 
     CastleInfoWnd(const std::string& a_Title, const SDL_FRect& a_Rect, RenderInterface* a_RI)
-        : Window(a_Title, a_Rect, a_RI) {}
+        : Window(a_Title, a_Rect, a_RI) {
+    }
 
-    void Init(Castle* a_pCastle) {
+    void Init(Castle* a_pCastle)
+    {
         pCastle = a_pCastle;
     }
 
     // Overload for initial setup
-    void Init(const std::string& castleName, int gold, int food) {
+    void Init(const std::string& castleName, int gold, int food)
+    {
         // This is a bit of a hack since we don't have a real castle object yet.
     }
 
-    void Render(RenderInterface* a_RI) override {
-        if (!bShow) return;
+    void Render(RenderInterface* a_RI) override
+    {
+        if (!bShow)
+            return;
 
         Window::Render(a_RI); // Render window background
 
@@ -484,7 +488,8 @@ public:
         float renderX = x;
         if (align == HAlign::Center) {
             renderX = x + (availableWidth - textRect.w) / 2.0f;
-        } else if (align == HAlign::Right) {
+        }
+        else if (align == HAlign::Right) {
             renderX = x + availableWidth - textRect.w;
         }
         textRect.x = renderX;
@@ -581,7 +586,7 @@ public:
             std::cerr << "Cannot create text texture: Font not loaded." << std::endl;
             return nullptr;
         }
-        
+
         SDL_Surface* textSurface = TTF_RenderText_Solid(font, message.c_str(), strlen(message.c_str()), textColor);
         if (!textSurface) {
             std::cerr << "Failed to create text surface: " << SDL_GetError() << std::endl;
@@ -643,7 +648,8 @@ public:
     {
         pMap.clear(); // Clear existing map data
         std::ifstream mapFile("map.txt");
-        if (!mapFile.is_open()) {
+        if (!mapFile.is_open())
+        {
             std::cerr << "Failed to open map.txt" << std::endl;
             // Handle error, maybe load a default map or exit
             return;
@@ -705,11 +711,6 @@ public:
     {
         spaceship = new Object();
         objects.push_back(spaceship);
-    }
-    void CreateAliens(Texture& Tex)
-    {
-        Alien* alien = new Alien();
-        objects.push_back(alien);
     }
 
     void createCastle(int MapIndex, Faction a_Fac)
@@ -930,11 +931,13 @@ public:
                         pCastleMenuWnd->bShow = true;
                     }
                 }
-            } else {
+            }
+            else {
                 pCastleInfoWnd->bShow = false;
                 pCastleMenuWnd->bShow = false;
             }
-        } else {
+        }
+        else {
             pCastleInfoWnd->bShow = false;
             pCastleMenuWnd->bShow = false;
         }
@@ -1175,7 +1178,7 @@ private:
             if (ObjectCountTex) SDL_RenderTexture(renderer, ObjectCountTex, nullptr, &ObjectCountRect); // Changed NULL to nullptr
             if (FPSTex) SDL_RenderTexture(renderer, FPSTex, nullptr, &FPSRect); // Changed NULL to nullptr
         }
-    
+
         ~FPS()
         {
             if (ObjectCountTex) SDL_DestroyTexture(ObjectCountTex);
