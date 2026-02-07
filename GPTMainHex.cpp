@@ -5,8 +5,8 @@
 #include <algorithm>
 #include <string>
 #include <cmath>
-#include <fstream> // For file operations
-#include <sstream> // For string stream operations
+#include <fstream>
+#include <sstream>
 
 #pragma comment(lib, "SDL3.lib")
 #pragma comment(lib, "SDL3_ttf.lib")
@@ -20,10 +20,10 @@ class Castle;
 
 const float HEX_SIDE_LENGTH = 24.0f;
 const float HEX_FLAT_TOP_WIDTH = HEX_SIDE_LENGTH * 2.0f;
-const float HEX_FLAT_TOP_HEIGHT = HEX_SIDE_LENGTH * sqrtf(3.0f);
-const float HORIZONTAL_SPACING = HEX_FLAT_TOP_WIDTH * 0.75f;
+const float HEX_FLAT_TOP_HEIGHT = HEX_FLAT_TOP_WIDTH;
+const float HORIZONTAL_SPACING = HEX_FLAT_TOP_WIDTH;
 const float VERTICAL_SPACING = HEX_FLAT_TOP_HEIGHT;
-const float ODD_ROW_X_OFFSET = HEX_FLAT_TOP_WIDTH / 2.0f;
+const float ODD_ROW_X_OFFSET = HEX_FLAT_TOP_WIDTH * 0.5f;
 // --- End Forward Declarations ---
 
 struct DebugManager
@@ -35,7 +35,7 @@ DebugManager DM;
 class Viewport
 {
 public:
-    const int WIDTH = 1920;
+    const int WIDTH = 2200;
     const int HEIGHT = 960;
 };
 
@@ -256,7 +256,7 @@ public:
     virtual RenderInterface* CreateRenderer(Viewport* VP) = 0;
     virtual void RenderText(const std::string& message, float x, float y, float availableWidth, HAlign align = HAlign::Left) = 0;
     virtual void RenderObject(Object* obj, Tile* pTile, bool bSelected) = 0;
-    virtual void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) = 0;
+    virtual void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH, bool bSelectedIndex) = 0;
     virtual void RenderTexture(Texture* pTex, SDL_FRect* pDestRect) = 0;
     virtual void RenderBox(SDL_FRect* pFRect, Uint8 R, Uint8 G, Uint8 B, Uint8 A) = 0;
 
@@ -266,6 +266,7 @@ public:
     virtual void PostRender() = 0;
 
     virtual void* GetRenderer() = 0;
+    virtual void SetWindowTitle(const std::string& title) = 0;
 
     Viewport* GetViewport() const { return _VP; }
 };
@@ -278,6 +279,7 @@ public:
     SDL_FRect Rect;
     RenderInterface* RI;
     bool bShow = true;
+    bool bHovered = false;
     Texture* pTex = nullptr;
 
     Window(const std::string& a_Title, const SDL_FRect& a_Rect, RenderInterface* a_RI) : Title(a_Title), Rect(a_Rect), RI(a_RI)
@@ -317,6 +319,9 @@ public:
         if (!Title.empty()) {
             float centerX = Rect.x + Rect.w / 2.0f;
             a_RI->RenderText(Title, Rect.x, Rect.y + 5, Rect.w, HAlign::Center);
+        }
+        if (bHovered) {
+            a_RI->RenderBox(&Rect, 255, 0, 0, 255);
         }
     }
 
@@ -427,14 +432,16 @@ public:
         SDL_Init(SDL_INIT_VIDEO);
 
         window = SDL_CreateWindow("Hexagon Map Game", VP->WIDTH, VP->HEIGHT, 0);
-        if (!window) {
+        if (!window)
+        {
             std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << std::endl;
             SDL_Quit();
             return nullptr;
         }
 
         renderer = SDL_CreateRenderer(window, nullptr);
-        if (!renderer) {
+        if (!renderer)
+        {
             std::cerr << "SDL_CreateRenderer failed: " << SDL_GetError() << std::endl;
             SDL_DestroyWindow(window);
             SDL_Quit();
@@ -442,7 +449,8 @@ public:
         }
         _VP = VP;
 
-        if (TTF_Init() == false) {
+        if (!TTF_Init())
+        {
             std::cerr << "TTF_Init failed: " << SDL_GetError() << std::endl;
             SDL_DestroyRenderer(renderer);
             SDL_DestroyWindow(window);
@@ -451,26 +459,28 @@ public:
         }
 
         font = TTF_OpenFont("NotoSansKR-Medium.ttf", 12);
-        if (!font) {
+        if (!font)
             std::cerr << "Failed to load font: NotoSansKR-Medium.ttf - " << SDL_GetError() << std::endl;
-        }
 
         return this;
     }
 
     void Destroy() override
     {
-        if (font) {
+        if (font)
+        {
             TTF_CloseFont(font);
             font = nullptr;
         }
         TTF_Quit();
 
-        if (renderer) {
+        if (renderer)
+        {
             SDL_DestroyRenderer(renderer);
             renderer = nullptr;
         }
-        if (window) {
+        if (window)
+        {
             SDL_DestroyWindow(window);
             window = nullptr;
         }
@@ -481,9 +491,8 @@ public:
     {
         SDL_FRect textRect;
         SDL_Texture* textTexture = CreateTextTexture(message, &textRect, x, y);
-        if (!textTexture) {
+        if (!textTexture)
             return;
-        }
 
         float renderX = x;
         if (align == HAlign::Center) {
@@ -520,31 +529,33 @@ public:
         }
     }
 
-    void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH) override
+    void RenderTile(Tile* pTile, int X, int Y, int MapW, int MapH, bool bSelectedIndex) override
     {
         SDL_RenderTexture(renderer, RM.GetTex(ResourceManager::ResID_Tile).Tex, &pTile->TexSrcRect, &pTile->TexDestRect);
 
-        if (DM.bShowObjectRect) {
-            SDL_SetRenderDrawColor(renderer, 0, 255, 255, 200);
+        if (DM.bShowObjectRect)
+        {
+            //SDL_SetRenderDrawColor(renderer, 0, 255, 255, 200);
 
-            float hex_center_x = pTile->TexDestRect.x + pTile->TexDestRect.w / 2.0f;
-            float hex_center_y = pTile->TexDestRect.y + pTile->TexDestRect.h / 2.0f;
+            //float hex_center_x = pTile->TexDestRect.x + pTile->TexDestRect.w / 2.0f;
+            //float hex_center_y = pTile->TexDestRect.y + pTile->TexDestRect.h / 2.0f;
 
-            float s = HEX_SIDE_LENGTH;
-            float h_half = HEX_SIDE_LENGTH * sqrtf(3.0f) / 2.0f;
+            //float s = HEX_SIDE_LENGTH;
+            //float h_half = HEX_SIDE_LENGTH * sqrtf(3.0f) / 2.0f;
 
-            SDL_FPoint vertices[6];
-            vertices[0] = { hex_center_x + s,          hex_center_y };
-            vertices[1] = { hex_center_x + s * 0.5f,   hex_center_y + h_half };
-            vertices[2] = { hex_center_x - s * 0.5f,   hex_center_y + h_half };
-            vertices[3] = { hex_center_x - s,          hex_center_y };
-            vertices[4] = { hex_center_x - s * 0.5f,   hex_center_y - h_half };
-            vertices[5] = { hex_center_x + s * 0.5f,   hex_center_y - h_half };
+            //SDL_FPoint vertices[6];
+            //vertices[0] = { hex_center_x + s,          hex_center_y };
+            //vertices[1] = { hex_center_x + s * 0.5f,   hex_center_y + h_half };
+            //vertices[2] = { hex_center_x - s * 0.5f,   hex_center_y + h_half };
+            //vertices[3] = { hex_center_x - s,          hex_center_y };
+            //vertices[4] = { hex_center_x - s * 0.5f,   hex_center_y - h_half };
+            //vertices[5] = { hex_center_x + s * 0.5f,   hex_center_y - h_half };
 
-            for (int k = 0; k < 6; ++k) {
-                SDL_RenderLine(renderer, vertices[k].x, vertices[k].y,
-                    vertices[(k + 1) % 6].x, vertices[(k + 1) % 6].y);
-            }
+            //for (int k = 0; k < 6; ++k)
+            //{
+            //    SDL_RenderLine(renderer, vertices[k].x, vertices[k].y,
+            //        vertices[(k + 1) % 6].x, vertices[(k + 1) % 6].y);
+            //}
         }
         if (DM.bShowObjectRect)
         {
@@ -552,6 +563,12 @@ public:
             SDL_RenderRect(renderer, &pTile->TexDestRect);
             std::string str = std::to_string(X) + "," + std::to_string(Y) + " " + std::to_string(pTile->BitmapIdx);
             RenderText(str, pTile->TexDestRect.x + pTile->TexDestRect.w / 2.0f, pTile->TexDestRect.y + pTile->TexDestRect.h / 2.0f, 0.0f, HAlign::Center);
+        }
+
+        if (bSelectedIndex)
+        {
+            SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+            SDL_RenderRect(renderer, &pTile->TexDestRect);
         }
     }
 
@@ -579,6 +596,7 @@ public:
     }
 
     void* GetRenderer() { return renderer; }
+    void SetWindowTitle(const std::string& title) override { SDL_SetWindowTitle(window, title.c_str()); }
 
     SDL_Texture* CreateTextTexture(const std::string& message, SDL_FRect* outRect, float x, float y)
     {
@@ -647,19 +665,23 @@ public:
     void initMap()
     {
         pMap.clear(); // Clear existing map data
-        std::ifstream mapFile("map.txt");
+        std::ifstream mapFile("savemap.txt");
+        if (!mapFile.is_open())
+            mapFile.open("map.txt");
         if (!mapFile.is_open())
         {
-            std::cerr << "Failed to open map.txt" << std::endl;
+            std::cerr << "Failed to open map file" << std::endl;
             // Handle error, maybe load a default map or exit
             return;
         }
 
         std::string line;
-        while (std::getline(mapFile, line)) {
+        while (std::getline(mapFile, line))
+        {
             std::stringstream ss(line);
             std::string segment;
-            while (std::getline(ss, segment, ',')) {
+            while (std::getline(ss, segment, ','))
+            {
                 pMap.push_back(std::stoi(segment));
             }
         }
@@ -771,6 +793,105 @@ public:
 
     size_t GetObjNum() const { return objects.size(); }
 
+    void SaveMap(const std::string& filename) {
+        std::ofstream file(filename);
+        for (int j = 0; j < MapH; ++j) {
+            for (int i = 0; i < MapW; ++i) {
+                file << vTileMap[j * MapW + i]->BitmapIdx;
+                if (i < MapW - 1) file << ",";
+            }
+            file << "\n";
+        }
+        file.close();
+    }
+
+    void LoadMap(const std::string& filename) {
+        for (auto& obj : objects) delete obj;
+        objects.clear();
+        for (auto& t : vTileMap) delete t;
+        vTileMap.clear();
+        pMap.clear();
+
+        std::ifstream mapFile(filename);
+        if (!mapFile.is_open()) {
+            std::cerr << "Failed to open " << filename << std::endl;
+            return;
+        }
+
+        std::string line;
+        while (std::getline(mapFile, line)) {
+            std::stringstream ss(line);
+            std::string segment;
+            while (std::getline(ss, segment, ',')) {
+                pMap.push_back(std::stoi(segment));
+            }
+        }
+        mapFile.close();
+
+        Texture& mapTex = RM.GetTex(ResourceManager::ResID_Tile);
+
+        for (int j = 0; j < MapH; ++j) {
+            for (int i = 0; i < MapW; ++i) {
+                int mapIdx = j * MapW + i;
+                int bitmapIdx = pMap[mapIdx];
+                Tile* pTile = nullptr;
+
+                if (bitmapIdx == 202) {
+                    pTile = new CastleTile();
+                    static int createdFaction = Faction_Wee;
+                    createCastle(mapIdx, static_cast<Faction>(createdFaction++));
+                }
+                else
+                    pTile = new Tile();
+                pTile->BitmapIdx = bitmapIdx;
+                pTile->MapIdx = mapIdx;
+
+                int mapTexW = static_cast<int>(mapTex.W);
+                int mapTileTexW = mapTexW / Tile::SourceBitmapTileSize;
+                float srcX = static_cast<float>((pTile->BitmapIdx % mapTileTexW) * Tile::SourceBitmapTileSize);
+                float srcY = static_cast<float>((pTile->BitmapIdx / mapTileTexW) * Tile::SourceBitmapTileSize);
+                pTile->TexSrcRect = { srcX, srcY, static_cast<float>(Tile::SourceBitmapTileSize), static_cast<float>(Tile::SourceBitmapTileSize) };
+
+                float destX = i * HORIZONTAL_SPACING;
+                float destY = j * VERTICAL_SPACING;
+
+                if (j % 2 != 0) {
+                    destX += ODD_ROW_X_OFFSET;
+                }
+
+                pTile->TexDestRect = { destX, destY, HEX_FLAT_TOP_WIDTH, HEX_FLAT_TOP_HEIGHT };
+
+                vTileMap.push_back(pTile);
+            }
+        }
+        SelectedIndex = -1;
+    }
+
+    int GetTileAtPosition(float x, float y)
+    {
+        for (auto& pTile : vTileMap)
+        {
+            if (pTile->IsInHex(x, y, HEX_SIDE_LENGTH))
+                return pTile->MapIdx;
+        }
+        return -1;
+    }
+
+    void SetTileBitmapIdx(int mapIdx, int bitmapIdx)
+    {
+        if (mapIdx < 0 || mapIdx >= MapW * MapH) return;
+        Tile* pTile = vTileMap[mapIdx];
+        pTile->BitmapIdx = bitmapIdx;
+        pMap[mapIdx] = bitmapIdx;
+
+        Texture& mapTex = RM.GetTex(ResourceManager::ResID_Tile);
+        int mapTexW = static_cast<int>(mapTex.W);
+        int mapTileTexW = mapTexW / Tile::SourceBitmapTileSize;
+        float srcX = static_cast<float>((bitmapIdx % mapTileTexW) * Tile::SourceBitmapTileSize);
+        float srcY = static_cast<float>((bitmapIdx / mapTileTexW) * Tile::SourceBitmapTileSize);
+        pTile->TexSrcRect = { srcX, srcY, static_cast<float>(Tile::SourceBitmapTileSize), static_cast<float>(Tile::SourceBitmapTileSize) };
+    }
+
     bool PlayerMoveLeft()
     {
         return true;
@@ -841,7 +962,8 @@ public:
         {
             for (int i = 0; i < MapW; ++i)
             {
-                RI->RenderTile(vTileMap[j * MapW + i], i, j, MapW, MapH);
+                int idx = j * MapW + i;
+                RI->RenderTile(vTileMap[idx], i, j, MapW, MapH, SelectedIndex==idx);
             }
         }
 
@@ -863,6 +985,55 @@ public:
     virtual size_t GetObjNum() const { return 0; }
     void GotoMenuState();
     void GotoPlayingState();
+    void SaveMap();
+    void LoadMap();
+};
+
+class CastleMenuWnd : public Window
+{
+    static const int ButtonCount = 6;
+    static constexpr float BtnX = 4.0f;
+    static constexpr float BtnW = 80.0f;
+    static constexpr float BtnH = 30.0f;
+    static constexpr float BtnStartY = 6.0f;
+    static constexpr float BtnStride = 34.0f;
+    int HoveredButton = -1;
+
+public:
+    CastleMenuWnd(const std::string& a_Title, const SDL_FRect& a_Size, RenderInterface* a_RI)
+        : Window(a_Title, a_Size, a_RI) {}
+
+    void UpdateHover(float mouseX, float mouseY)
+    {
+        HoveredButton = -1;
+        if (!bShow) return;
+        for (int i = 0; i < ButtonCount; ++i)
+        {
+            SDL_FRect btnRect = {
+                Rect.x + BtnX,
+                Rect.y + BtnStartY + i * BtnStride,
+                BtnW, BtnH
+            };
+            if (mouseX >= btnRect.x && mouseX <= btnRect.x + btnRect.w &&
+                mouseY >= btnRect.y && mouseY <= btnRect.y + btnRect.h)
+            {
+                HoveredButton = i;
+                break;
+            }
+        }
+    }
+
+    void Render(RenderInterface* a_RI) override
+    {
+        Window::Render(a_RI);
+        if (!bShow || HoveredButton < 0) return;
+        SDL_FRect btnRect = {
+            Rect.x + BtnX,
+            Rect.y + BtnStartY + HoveredButton * BtnStride,
+            BtnW, BtnH
+        };
+        a_RI->RenderBox(&btnRect, 255, 0, 0, 255);
+    }
 };
 
 class GameStatePlaying : public GameState
@@ -873,7 +1044,7 @@ class GameStatePlaying : public GameState
 
     std::vector<Window*> vpWindowArray;
     CastleInfoWnd* pCastleInfoWnd = nullptr;
-    Window* pCastleMenuWnd = nullptr;
+    CastleMenuWnd* pCastleMenuWnd = nullptr;
 public:
     GameStatePlaying(StateManager* pSM) : GameState(pSM) {}
     void Init(const Viewport& VP, RenderInterface* RI) override
@@ -884,7 +1055,7 @@ public:
         pCastleInfoWnd->Init(u8"허창", 1000, 2000);
         vpWindowArray.push_back(pCastleInfoWnd);
 
-        pCastleMenuWnd = new Window("", { static_cast<float>(VP.WIDTH - 300), 400.f, 88.f, 214.f }, RI);
+        pCastleMenuWnd = new CastleMenuWnd("", { static_cast<float>(VP.WIDTH - 300), 400.f, 88.f, 214.f }, RI);
         pCastleMenuWnd->SetTexture(&RM.GetTex(ResourceManager::ResID_CastleMenu));
         pCastleMenuWnd->bShow = false;
         vpWindowArray.push_back(pCastleMenuWnd);
@@ -902,6 +1073,11 @@ public:
 
     size_t GetObjNum() const override { return Stage.GetObjNum(); }
 
+    void SaveMap() { Stage.SaveMap("savemap.txt"); }
+    void LoadMap() { Stage.LoadMap("savemap.txt"); }
+    int GetTileAtPosition(float x, float y) { return Stage.GetTileAtPosition(x, y); }
+    void SetTileBitmapIdx(int mapIdx, int bitmapIdx) { Stage.SetTileBitmapIdx(mapIdx, bitmapIdx); }
+
     void Update() override
     {
         Stage.Update();
@@ -918,12 +1094,14 @@ public:
 
         isHandled = Stage.HandleInput(event);
 
-        if (Stage.SelectedIndex != -1) {
+        if (Stage.SelectedIndex != -1)
+        {
             bool bCastleFound = Stage.SetCastleInfoWnd(pCastleInfoWnd);
             if (bCastleFound) {
                 pCastleInfoWnd->bShow = true;
 
-                if (lastSelectedIndex != Stage.SelectedIndex) {
+                if (lastSelectedIndex != Stage.SelectedIndex)
+                {
                     if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
                         float x = static_cast<float>(event.button.x);
                         float y = static_cast<float>(event.button.y);
@@ -944,6 +1122,11 @@ public:
 
         lastSelectedIndex = Stage.SelectedIndex;
 
+        if (event.type == SDL_EVENT_MOUSE_MOTION)
+        {
+            pCastleMenuWnd->UpdateHover(event.motion.x, event.motion.y);
+        }
+
         if (event.type == SDL_EVENT_KEY_DOWN)
         {
             if (event.key.key == SDLK_F10)
@@ -956,7 +1139,8 @@ public:
     }
 
 private:
-    Viewport* GetViewport() {
+    Viewport* GetViewport()
+    {
         static Viewport vp_instance;
         return &vp_instance;
     }
@@ -969,6 +1153,26 @@ public:
     void Execute(GameState* pState) override
     {
         pState->GotoPlayingState();
+    }
+};
+
+class SaveMapWnd : public Window
+{
+public:
+    SaveMapWnd(const std::string& a_Title, const SDL_FRect& a_Size, RenderInterface* a_RI) : Window(a_Title, a_Size, a_RI) {}
+    void Execute(GameState* pState) override
+    {
+        pState->SaveMap();
+    }
+};
+
+class LoadMapWnd : public Window
+{
+public:
+    LoadMapWnd(const std::string& a_Title, const SDL_FRect& a_Size, RenderInterface* a_RI) : Window(a_Title, a_Size, a_RI) {}
+    void Execute(GameState* pState) override
+    {
+        pState->LoadMap();
     }
 };
 
@@ -989,6 +1193,15 @@ public:
 
         const float btnWndW = 140;
         const float btnWndH = 26;
+
+        Location saveBtnLoc = { pMenuWnd->TexDestRect.x + 6, pMenuWnd->TexDestRect.y + 88 };
+        Window* pSaveMapWnd = new SaveMapWnd(u8"저장", { saveBtnLoc.x, saveBtnLoc.y, btnWndW, btnWndH }, RI);
+        vpWindowArray.push_back(pSaveMapWnd);
+
+        Location loadBtnLoc = { pMenuWnd->TexDestRect.x + 6, pMenuWnd->TexDestRect.y + 116 };
+        Window* pLoadMapWnd = new LoadMapWnd(u8"로드", { loadBtnLoc.x, loadBtnLoc.y, btnWndW, btnWndH }, RI);
+        vpWindowArray.push_back(pLoadMapWnd);
+
         Location btnLoc = { pMenuWnd->TexDestRect.x + 6, pMenuWnd->TexDestRect.y + 144 };
         Window* pReturnToGameWnd = new ReturnToGameWnd("", { btnLoc.x, btnLoc.y, btnWndW, btnWndH }, RI);
         vpWindowArray.push_back(pReturnToGameWnd);
@@ -1021,6 +1234,14 @@ public:
                 DM.bShowObjectRect = !DM.bShowObjectRect;
                 isHandled = true;
             }
+        }
+
+        if (event.type == SDL_EVENT_MOUSE_MOTION)
+        {
+            float x = event.motion.x;
+            float y = event.motion.y;
+            for (auto& wnd : vpWindowArray)
+                wnd->bHovered = wnd->IsIn(x, y);
         }
 
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
@@ -1068,8 +1289,16 @@ public:
     void Destroy()
 
     {
-        if (pGameStatePlaying) { delete pGameStatePlaying; pGameStatePlaying = nullptr; }
-        if (pGameStateMenu) { delete pGameStateMenu; pGameStateMenu = nullptr; }
+        if (pGameStatePlaying)
+        {
+            delete pGameStatePlaying;
+            pGameStatePlaying = nullptr;
+        }
+        if (pGameStateMenu)
+        {
+            delete pGameStateMenu;
+            pGameStateMenu = nullptr;
+        }
         State = nullptr;
     }
 
@@ -1087,14 +1316,21 @@ public:
         State = pGameStatePlaying;
     }
 
+    void SaveMap() { pGameStatePlaying->SaveMap(); }
+    void LoadMap() { pGameStatePlaying->LoadMap(); }
+    int GetTileAtPosition(float x, float y) { return pGameStatePlaying->GetTileAtPosition(x, y); }
+    void SetTileBitmapIdx(int mapIdx, int bitmapIdx) { pGameStatePlaying->SetTileBitmapIdx(mapIdx, bitmapIdx); }
+
     void Update() override
     {
-        if (State) State->Update();
+        if (State)
+            State->Update();
     }
 
     void Render(RenderInterface* RI) override
     {
-        if (State) State->Render(RI);
+        if (State)
+            State->Render(RI);
     }
 
     bool HandleInput(const SDL_Event& event) override
@@ -1114,6 +1350,14 @@ void GameState::GotoPlayingState()
 {
     if (pSM) pSM->GotoPlayingState();
 }
+void GameState::SaveMap()
+{
+    if (pSM) pSM->SaveMap();
+}
+void GameState::LoadMap()
+{
+    if (pSM) pSM->LoadMap();
+}
 
 class Game
 {
@@ -1121,6 +1365,9 @@ class Game
     Viewport VP;
 
     StateManager StateMgr;
+
+    bool bEditMode = false;
+    int SelectedBitmapIdx = -1;
 
 public:
     Game() : Fps(nullptr) {}
@@ -1214,6 +1461,47 @@ private:
         {
             if (event.type == SDL_EVENT_QUIT)
                 quit = 1;
+            else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F8)
+            {
+                bEditMode = !bEditMode;
+                RI->SetWindowTitle(bEditMode ? "Hexagon Map Game [Edit Mode]" : "Hexagon Map Game [Game Mode]");
+                if (!bEditMode) SelectedBitmapIdx = -1;
+            }
+            else if (bEditMode && event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT)
+            {
+                float x = event.button.x;
+                float y = event.button.y;
+                bool editHandled = false;
+
+                Texture& tileTex = RM.GetTex(ResourceManager::ResID_Tile);
+                float scale = HEX_FLAT_TOP_WIDTH / Tile::SourceBitmapTileSize;
+                float scaledW = tileTex.W * scale;
+                float scaledH = tileTex.H * scale;
+                float paletteX = VP.WIDTH - scaledW;
+                float paletteY = VP.HEIGHT - scaledH;
+
+                if (x >= paletteX && x < paletteX + scaledW && y >= paletteY && y < paletteY + scaledH)
+                {
+                    float scaledTileSize = Tile::SourceBitmapTileSize * scale;
+                    int col = static_cast<int>((x - paletteX) / scaledTileSize);
+                    int row = static_cast<int>((y - paletteY) / scaledTileSize);
+                    int tileCols = static_cast<int>(tileTex.W / Tile::SourceBitmapTileSize);
+                    SelectedBitmapIdx = row * tileCols + col;
+                    editHandled = true;
+                }
+                else if (SelectedBitmapIdx >= 0)
+                {
+                    int mapIdx = StateMgr.GetTileAtPosition(x, y);
+                    if (mapIdx >= 0)
+                    {
+                        StateMgr.SetTileBitmapIdx(mapIdx, SelectedBitmapIdx);
+                        editHandled = true;
+                    }
+                }
+
+                if (!editHandled)
+                    StateMgr.HandleInput(event);
+            }
             else
             {
                 StateMgr.HandleInput(event);
@@ -1242,13 +1530,16 @@ private:
         SDL_FRect destRect = { static_cast<float>(VP.WIDTH - scaledW), static_cast<float>(VP.HEIGHT - scaledH), scaledW, scaledH };
         RI->RenderTexture(&tileTex, &destRect);
 
-        if (DM.bShowObjectRect) {
+        if (DM.bShowObjectRect)
+        {
             int tileCols = static_cast<int>(tileTex.W / Tile::SourceBitmapTileSize);
             int tileRows = static_cast<int>(tileTex.H / Tile::SourceBitmapTileSize);
             float scaledTileSize = Tile::SourceBitmapTileSize * scale;
 
-            for (int j = 0; j < tileRows; ++j) {
-                for (int i = 0; i < tileCols; ++i) {
+            for (int j = 0; j < tileRows; ++j)
+            {
+                for (int i = 0; i < tileCols; ++i)
+                {
                     SDL_FRect tileRect = {
                         destRect.x + i * scaledTileSize,
                         destRect.y + j * scaledTileSize,
@@ -1261,6 +1552,21 @@ private:
                     RI->RenderText(indexStr, tileRect.x + tileRect.w / 2.0f, tileRect.y + tileRect.h / 2.0f, 0.0f, HAlign::Center);
                 }
             }
+        }
+
+        if (bEditMode && SelectedBitmapIdx >= 0)
+        {
+            int tileCols = static_cast<int>(tileTex.W / Tile::SourceBitmapTileSize);
+            float scaledTileSize = Tile::SourceBitmapTileSize * scale;
+            int col = SelectedBitmapIdx % tileCols;
+            int row = SelectedBitmapIdx / tileCols;
+            SDL_FRect selRect = {
+                destRect.x + col * scaledTileSize,
+                destRect.y + row * scaledTileSize,
+                scaledTileSize,
+                scaledTileSize
+            };
+            RI->RenderBox(&selRect, 255, 0, 0, 255);
         }
 
         Fps->Render(RI);
